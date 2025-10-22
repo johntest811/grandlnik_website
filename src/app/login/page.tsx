@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { FaEnvelope, FaLock, FaGoogle } from "react-icons/fa";
 import Image from "next/image";
-import TopNavBar from "@/components/TopNavBar";
+import TopNavBar from "../../components/TopNavBar";
 import { useRouter } from "next/navigation";
 import { supabase } from "../Clients/Supabase/SupabaseClients";
 import LoadingSuccess from "./LoadingSuccess";
