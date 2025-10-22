@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { FaEnvelope, FaLock, FaGoogle } from "react-icons/fa";
 import Image from "next/image";
-import TopNavBar from "../../components/TopNavBar";
+import TopNavBar from "@/components/TopNavBar";
 import { useRouter } from "next/navigation";
 import { supabase } from "../Clients/Supabase/SupabaseClients";
 import LoadingSuccess from "./LoadingSuccess";
@@ -16,6 +16,10 @@ export default function LoginPage() {
   const [confirmationSent, setConfirmationSent] = useState(false);
   const router = useRouter();
 
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -23,7 +27,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: "https://grandlnik-website.vercel.app/login/confirm" // or your deployed URL
+        emailRedirectTo: `${baseUrl}/login/confirm`
       }
     });
     if (error) {
@@ -38,7 +42,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: "https://grandlnik-website.vercel.app/login"
+        emailRedirectTo: "http://localhost:3000/login"
       }
     });
     return error;
@@ -57,7 +61,7 @@ export default function LoginPage() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "https://grandlnik-website.vercel.app/home", // or your deployed URL
+        redirectTo: `${baseUrl}/home`,
       },
     });
   };

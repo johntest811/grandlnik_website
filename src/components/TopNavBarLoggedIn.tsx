@@ -231,7 +231,7 @@ export default function TopNavBarLoggedIn() {
       {/* Main Navigation */}
       <header className="w-full bg-white flex flex-col sm:flex-row items-center justify-between px-4 py-2 shadow z-20 relative">
         <div className="flex items-center gap-2 mb-3 mt-3">
-          <Image src="/Ge Logo.avif" alt="Grand East Logo" width={170} height={170} />
+          <Image src="/ge-logo.avif" alt="Grand East Logo" width={170} height={170} />
         </div>
         
         <nav ref={navRef} className="flex-1 flex justify-center items-center gap-8 ml-8 relative z-30">

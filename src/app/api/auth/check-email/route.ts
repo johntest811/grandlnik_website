@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const runtime = 'nodejs'; // ensure Node runtime
+
 const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPA_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 

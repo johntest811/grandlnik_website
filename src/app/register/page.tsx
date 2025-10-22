@@ -11,12 +11,15 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [popup, setPopup] = useState<{ success: boolean; message: ReactNode } | null>(null);
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   // Google OAuth registration
   const handleGoogleRegister = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "http://localhost:3000/home", // or your deployed URL
+        redirectTo: `${baseUrl}/home`,
       },
     });
   };
@@ -52,7 +55,7 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        emailRedirectTo: "http://localhost:3000/register/success",
+        emailRedirectTo: `${baseUrl}/register/success`,
         data: { name }
       }
     });

@@ -7,12 +7,16 @@ import { supabase } from "@/app/Clients/Supabase/SupabaseClients";
 import TopNavBar from "@/components/TopNavBar";
 
 export default function ResetPasswordPage() {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+
   // Google OAuth login
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "http://localhost:3000/home", // or your deployed URL
+        redirectTo: `${baseUrl}/home`,
       },
     });
   };

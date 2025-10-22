@@ -7,7 +7,7 @@ export default function TopNavBar() {
       {/* Header */}
       <header className="w-full bg-white flex flex-col sm:flex-row items-center justify-between px-4 py-2 shadow z-10">
         <div className="flex items-center gap-2 mb-3 mt-3">
-          <Image src="/GE Logo.avif" alt="Grand East Logo" width={170} height={170}/>
+          <Image src="/ge-logo.avif" alt="Grand East Logo" width={170} height={170}/>
         </div>
         <button className="bg-[#8B1C1C] text-white px-4 py-2 rounded font-semibold mt-2 sm:mt-0 hover:bg-[#a83232] transition">
           INQUIRE NOW

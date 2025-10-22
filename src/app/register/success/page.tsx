@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { FaCheckCircle } from "react-icons/fa";
 
 export default function RegisterSuccessPage() {
@@ -8,6 +8,12 @@ export default function RegisterSuccessPage() {
       window.location.href = "/login";
     }, 3500);
     return () => clearTimeout(timer);
+  }, []);
+
+  const email = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const p = new URLSearchParams(window.location.search);
+    return p.get("email");
   }, []);
 
   return (
@@ -19,9 +25,13 @@ export default function RegisterSuccessPage() {
       <div className="max-w-xl mx-auto">
         <p className="text-lg text-gray-700 text-center mb-2">
           Please confirm your account creation.<br />
-          A confirmation email has been sent to <span className="font-semibold text-[#8B1C1C]">johnezrabugao811@gmail.com</span>.<br />
-          You must click the <span className="font-semibold">"Register Account"</span> link in your Gmail inbox to activate your account.<br />
-          If you do not confirm within a certain time, the link will expire and become invalid.
+          {email ? (
+            <>A confirmation email has been sent to <span className="font-semibold text-[#8B1C1C]">{email}</span>.<br /></>
+          ) : (
+            <>A confirmation email has been sent to your inbox.<br /></>
+          )}
+          You must click the <span className="font-semibold">"Register Account"</span> link to activate your account.<br />
+          If you do not confirm within a certain time, the link will expire.
         </p>
         <p className="mt-4 text-gray-500 text-center text-base">Redirecting to login...</p>
       </div>
