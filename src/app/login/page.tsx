@@ -23,7 +23,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: "http://localhost:3000/login/confirm" // or your deployed URL
+        emailRedirectTo: "https://grandlnik-website.vercel.app/login/confirm" // or your deployed URL
       }
     });
     if (error) {
@@ -38,7 +38,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: "http://localhost:3000/login"
+        emailRedirectTo: "https://grandlnik-website.vercel.app/login"
       }
     });
     return error;
@@ -57,7 +57,7 @@ export default function LoginPage() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "http://localhost:3000/home", // or your deployed URL
+        redirectTo: "https://grandlnik-website.vercel.app/home", // or your deployed URL
       },
     });
   };
