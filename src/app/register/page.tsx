@@ -13,7 +13,7 @@ export default function RegisterPage() {
   const [popup, setPopup] = useState<{ success: boolean; message: ReactNode } | null>(null);
   const baseUrl =
     process.env.NEXT_PUBLIC_BASE_URL ||
-    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    (typeof window !== "undefined" ? window.location.origin : "https://grandlnik-website.vercel.app");
   // Google OAuth registration
   const handleGoogleRegister = async () => {
     await supabase.auth.signInWithOAuth({

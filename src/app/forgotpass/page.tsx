@@ -9,7 +9,7 @@ import TopNavBar from "@/components/TopNavBar";
 export default function ResetPasswordPage() {
   const baseUrl =
     process.env.NEXT_PUBLIC_BASE_URL ||
-    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    (typeof window !== "undefined" ? window.location.origin : "https://grandlnik-website.vercel.app");
 
   // Google OAuth login
   const handleGoogleLogin = async () => {

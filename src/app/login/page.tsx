@@ -18,7 +18,7 @@ export default function LoginPage() {
 
   const baseUrl =
     process.env.NEXT_PUBLIC_BASE_URL ||
-    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    (typeof window !== "undefined" ? window.location.origin : "https://grandlnik-website.vercel.app");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +42,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: "http://localhost:3000/login"
+        emailRedirectTo: "https://grandlnik-website.vercel.app/login"
       }
     });
     return error;
