@@ -1,0 +1,44 @@
+{
+  "name": "grandlink_website",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@sendgrid/mail": "^8.1.5",
+    "@supabase/supabase-js": "^2.57.2",
+    "@types/twilio": "^3.19.2",
+    "embla-carousel": "^8.6.0",
+    "embla-carousel-react": "^8.6.0",
+    "framer-motion": "^12.23.12",
+    "next": "^15.5.2",
+    "nodemailer": "^7.0.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-icons": "^5.5.0",
+    "react-responsive-carousel": "^3.2.23",
+    "stripe": "^19.0.0",
+    "three": "^0.180.0",
+    "three-stdlib": "^2.36.0",
+    "twilio": "^5.9.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20",
+    "@types/nodemailer": "^7.0.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/stripe": "^8.0.416",
+    "@types/three": "^0.179.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
