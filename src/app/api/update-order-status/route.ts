@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
     const message = statusMessages[newStatus] || `Your order status has been updated to: ${statusDisplay}`;
 
     if (shouldSendInApp) {
-      const { error: notifErr } = await supabase.from("user_notifications").insert({
+      const baseNotification: any = {
         user_id: orderData.user_id,
         title: `Order Status: ${statusDisplay}`,
         message: `${productName} - ${message}`,
@@ -171,10 +171,19 @@ export async function POST(request: NextRequest) {
         },
         action_url: `/profile/order`,
         order_id: userItemId,
-        product_id: orderData.product_id,
         is_read: false,
         created_at: now,
-      });
+      };
+
+      // Only set product_id if it exists to avoid FK failures
+      const notificationRow = orderData.product_id
+        ? { ...baseNotification, product_id: orderData.product_id }
+        : baseNotification;
+
+      const { error: notifErr } = await supabase
+        .from("user_notifications")
+        .insert(notificationRow);
+
       if (notifErr) console.warn("Notification insert error:", notifErr);
     }
 

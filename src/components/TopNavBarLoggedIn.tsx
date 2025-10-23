@@ -2,8 +2,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { FaEnvelope, FaThumbsUp, FaPhone, FaUserCircle, FaChevronDown, FaBell } from "react-icons/fa";
 import Link from "next/link";
+import { FaBell, FaChevronDown, FaEnvelope, FaPhone, FaThumbsUp, FaUserCircle } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/app/Clients/Supabase/SupabaseClients";
 
@@ -354,68 +354,56 @@ export default function TopNavBarLoggedIn() {
             {notifOpen && (
               <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border z-50 max-h-[500px] overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                  <span className="font-semibold text-sm text-gray-800">Notifications</span>
                   <div className="flex items-center gap-2">
+                    <span className="font-semibold text-gray-800">Notifications</span>
                     {unreadCount > 0 && (
-                      <button
-                        className="text-xs text-blue-600 hover:underline"
-                        onClick={markAllRead}
-                        title="Mark all as read"
-                      >
-                        Mark all read
-                      </button>
+                      <span className="text-xs bg-[#8B1C1C] text-white rounded-full px-2 py-0.5">
+                        {unreadCount}
+                      </span>
                     )}
-                    <button
-                      className="text-xs text-gray-600 hover:text-gray-800"
-                      onClick={() => setNotifOpen(false)}
-                      aria-label="Close notifications"
-                    >
-                      ✕
-                    </button>
                   </div>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllRead}
+                      className="text-xs text-[#8B1C1C] hover:underline"
+                    >
+                      Mark all read
+                    </button>
+                  )}
                 </div>
 
                 <div className="max-h-80 overflow-auto">
                   {notifications.length === 0 ? (
-                    <div className="p-4 text-sm text-gray-700">No notifications</div>
+                    <div className="p-6 text-center text-gray-500">No notifications yet</div>
                   ) : (
                     <ul className="divide-y">
                       {notifications.map((n) => {
                         const meta = parseMetadata(n.metadata);
-                        const desc = describeNotification(n) || n.message;
+                        const icon = getNotificationIcon(n.type);
                         return (
-                          <li key={n.id} className={`p-3 ${n.is_read ? "bg-white" : "bg-gray-50"}`}>
+                          <li
+                            key={n.id}
+                            className={`p-3 hover:bg-gray-50 cursor-pointer ${!n.is_read ? 'bg-blue-50' : ''}`}
+                            onClick={() => {
+                              if (!n.is_read) markAsRead(n.id);
+                              if (n.action_url) router.push(n.action_url);
+                            }}
+                          >
                             <div className="flex items-start gap-3">
-                              <div className="text-lg">{getNotificationIcon(n.type)}</div>
+                              <div className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100">{icon}</div>
                               <div className="flex-1">
                                 <div className="flex items-center justify-between">
-                                  <h4 className="text-sm font-semibold text-gray-900">{n.title}</h4>
-                                  <span className="text-[11px] text-gray-500">
+                                  <p className="text-sm font-medium text-gray-900">{n.title}</p>
+                                  <span className="text-[10px] text-gray-500">
                                     {new Date(n.created_at).toLocaleString()}
                                   </span>
                                 </div>
-                                <p className="text-sm text-gray-800 mt-0.5 line-clamp-2">{desc}</p>
-                                <div className="mt-2 flex items-center gap-2">
-                                  {n.action_url && (
-                                    <Link
-                                      href={n.action_url}
-                                      className="text-xs text-blue-600 hover:underline"
-                                      onClick={() => setNotifOpen(false)}
-                                    >
-                                      View
-                                    </Link>
-                                  )}
-                                  {!n.is_read && (
-                                    <button
-                                      onClick={() => markAsRead(n.id)}
-                                      className="text-xs text-gray-600 hover:text-gray-900"
-                                      title="Mark as read"
-                                    >
-                                      Mark as read
-                                    </button>
-                                  )}
-                                </div>
+                                <p className="text-sm text-gray-700 line-clamp-2">{n.message}</p>
+                                {describeNotification(n) && (
+                                  <p className="text-[11px] text-gray-500 mt-1">{describeNotification(n)}</p>
+                                )}
                               </div>
+                              {!n.is_read && <span className="w-2 h-2 bg-[#8B1C1C] rounded-full mt-2" />}
                             </div>
                           </li>
                         );
@@ -424,9 +412,13 @@ export default function TopNavBarLoggedIn() {
                   )}
                 </div>
 
-                <div className="p-3 text-center border-t bg-gray-50">
-                  <Link href="/profile" className="text-xs text-blue-600 hover:underline">
-                    See all notifications
+                <div className="p-3 text-center border-top bg-gray-50">
+                  <Link
+                    href="/profile/notifications"
+                    className="text-sm text-[#8B1C1C] hover:underline"
+                    onClick={() => setNotifOpen(false)}
+                  >
+                    View all notifications
                   </Link>
                 </div>
               </div>
@@ -511,18 +503,11 @@ export default function TopNavBarLoggedIn() {
           <div className="fixed top-20 right-6 z-50 animate-slide-in">
             <div className="bg-white shadow-xl border-l-4 border-l-blue-500 px-4 py-3 rounded-lg w-80 max-w-sm">
               <div className="flex items-start gap-2">
-                <div className="text-lg">🔔</div>
+                <div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50">🔔</div>
                 <div className="flex-1">
-                  <div className="text-sm font-semibold text-gray-900">{toast.title}</div>
-                  <div className="text-sm text-gray-800 mt-0.5">{toast.message}</div>
+                  <p className="text-sm font-semibold text-gray-900">{toast.title}</p>
+                  <p className="text-xs text-gray-700">{toast.message}</p>
                 </div>
-                <button
-                  onClick={() => setToast(null)}
-                  className="text-gray-400 hover:text-gray-600 text-lg"
-                  aria-label="Dismiss"
-                >
-                  ×
-                </button>
               </div>
             </div>
           </div>
