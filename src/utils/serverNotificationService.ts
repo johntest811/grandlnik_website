@@ -25,6 +25,8 @@ if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
   });
 }
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://grandlnik-website.vercel.app';
+
 export const serverNotificationService = {
   // Send new product notification to all users who want them
   async notifyNewProduct(productName: string, productId: string, adminName: string) {
@@ -352,5 +354,26 @@ export const serverNotificationService = {
       console.error("Error initializing user preferences:", error);
       return null;
     }
-  }
+  },
+
+  async sendEmailNotification({ recipientEmail, subject, message, notificationType, relatedEntityType, relatedEntityId }: {
+    recipientEmail: string; subject: string; message: string;
+    notificationType: string; relatedEntityType: string; relatedEntityId: string;
+  }) {
+    try {
+      const response = await fetch(`${BASE_URL}/api/send-notification-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientEmail, subject, message,
+          notificationType, relatedEntityType, relatedEntityId
+        })
+      });
+      if (!response.ok) throw new Error(`Email API error: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Error sending email notification:", error);
+      throw error;
+    }
+  },
 };

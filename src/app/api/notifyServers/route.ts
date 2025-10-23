@@ -61,6 +61,10 @@ async function notifySingleUser(user: any, title: string, message: string, type:
   }
 }
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as NotifyPayload;

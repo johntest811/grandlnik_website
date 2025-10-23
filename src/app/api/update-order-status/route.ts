@@ -34,6 +34,10 @@ if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
   console.warn("GMAIL_USER / GMAIL_PASS not configured - email sending disabled.");
 }
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function POST(request: NextRequest) {
   try {
     const { userItemId, newStatus, adminName, adminNotes, estimatedDeliveryDate, skipUpdate } = await request.json();
@@ -183,6 +187,7 @@ export async function POST(request: NextRequest) {
           text: `${productName} - ${message}`,
           html: `<p><strong>${productName}</strong> - ${message}</p>`,
         });
+        console.log("✉️ Email sent to:", userEmail, "status:", statusDisplay);
       } catch (emailErr) {
         console.warn("Email send error:", emailErr);
       }
