@@ -13,11 +13,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { data } = body;
 
+    // After you parsed the incoming payload and have `sessionData` (usually payload.data)
+    const sessionId =
+      String(
+        (sessionData && (sessionData.id || sessionData.reference_number)) ||
+        (payload?.data?.id) ||
+        (payload?.id) ||
+        ''
+      );
+
     if (data?.attributes?.type === 'checkout_session.payment.paid') {
       const sessionData = data.attributes.data;
       const userItemIdsCsv = sessionData?.attributes?.metadata?.user_item_ids;
       const userItemId = sessionData?.attributes?.metadata?.user_item_id;
-      const userItemIds: string[] = userItemIdsCsv ? String(userItemIdsCsv).split(",").map((s) => s.trim()).filter(Boolean) : (userItemId ? [userItemId] : []);
+      const userItemIds: string[] = userItemIdsCsv
+        ? String(userItemIdsCsv).split(',').map(s => s.trim()).filter(Boolean)
+        : (userItemId ? [userItemId] : []);
 
       if (userItemIds.length === 0) {
         console.error('❌ No user_item_id(s) in webhook data');
@@ -34,22 +45,21 @@ export async function POST(request: NextRequest) {
 
         if (!userItem) continue;
 
-        // Update item status and meta
         await supabase
           .from('user_items')
-          .update({ 
+          .update({
             status: 'reserved',
             order_status: 'reserved',
             order_progress: 'payment_confirmed',
             payment_status: 'completed',
-            payment_id: sessionId,
+            payment_id: sessionId, // <-- now defined
             meta: {
               ...userItem.meta,
               payment_confirmed_at: new Date().toISOString(),
               amount_paid: amountPaid,
               payment_session_id: sessionId,
-              payment_method: 'paymongo'
-            }
+              payment_method: 'paymongo',
+            },
           })
           .eq('id', id);
 
