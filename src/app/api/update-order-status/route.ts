@@ -175,15 +175,11 @@ export async function POST(request: NextRequest) {
         created_at: now,
       };
 
-      // Only set product_id if it exists to avoid FK failures
-      const notificationRow = orderData.product_id
-        ? { ...baseNotification, product_id: orderData.product_id }
-        : baseNotification;
+      const notifRow = orderData.product_id ? { ...baseNotification, product_id: orderData.product_id } : baseNotification;
 
       const { error: notifErr } = await supabase
         .from("user_notifications")
-        .insert(notificationRow);
-
+        .insert(notifRow);
       if (notifErr) console.warn("Notification insert error:", notifErr);
     }
 

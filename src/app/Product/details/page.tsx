@@ -22,6 +22,8 @@ function ProductDetailsPageContent() {
   const [product, setProduct] = useState<any>(null);
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [show3D, setShow3D] = useState(false);
+  const [qty, setQty] = useState(1);
+  const [colorAddon, setColorAddon] = useState<{ enabled: boolean; color?: string; fee: number }>({ enabled: false, fee: 0 });
   const router = useRouter();
 
   useEffect(() => {
@@ -100,6 +102,35 @@ function ProductDetailsPageContent() {
 
     // Redirect to reservation form with product ID
     router.push(`/reservation?productId=${product.id}`);
+  };
+
+  const addToCart = async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = (userData as any)?.user?.id;
+    if (!userId) {
+      alert("Please log in to add to cart.");
+      return;
+    }
+    const addons = [];
+    if (colorAddon.enabled && colorAddon.fee > 0) {
+      addons.push({ key: 'color_customization', label: 'Color Customization', fee: Number(colorAddon.fee || 0), value: colorAddon.color || '' });
+    }
+    const res = await fetch('/api/cart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        productId: product.id,
+        quantity: qty,
+        meta: { product_name: product.name, base_price: product.price, addons }
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data?.error || "Failed to add to cart");
+      return;
+    }
+    router.push('/profile/cart');
   };
 
   const isOutOfStock = product.inventory <= 0;
@@ -199,40 +230,27 @@ function ProductDetailsPageContent() {
           
           {/* Actions */}
           <div className="flex gap-8 mt-10">
-            <button
-              disabled={!has3DModels}
-              onClick={() => setShow3D(true)}
-              className={`flex flex-col items-center px-6 py-4 rounded border transition-all duration-200
-                ${has3DModels
-                  ? "bg-black text-white hover:bg-gray-900 hover:scale-105"
-                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                }`}
-              title={has3DModels ? `View ${fbxUrls.length} 3D Model${fbxUrls.length > 1 ? 's' : ''}` : "No 3D models available"}
-            >
-              <span className="font-bold text-base">3D</span>
-              <span className="text-base">
-                3D View {has3DModels && fbxUrls.length > 1 ? `(${fbxUrls.length})` : ''}
-              </span>
-            </button>
-            
-            <button
-              onClick={handleAddToWishlist}
-              className="flex flex-col items-center px-6 py-4 rounded border bg-gray-100 text-gray-700 transition-all duration-200 hover:bg-red-100 hover:text-red-700 hover:scale-105"
-            >
-              <span className="font-bold text-base">♥</span>
-              <span className="text-base">Add to Wishlist</span>
-            </button>
-            
-            <button
-              onClick={handleReserveNow}
-              disabled={isOutOfStock}
-              className={`px-8 py-4 rounded font-semibold text-xl transition-all duration-200 ${
-                isOutOfStock
-                  ? 'bg-gray-400 text-white cursor-not-allowed'
-                  : 'bg-red-600 text-white hover:bg-red-700 hover:scale-105'
-              }`}
-            >
-              {isOutOfStock ? 'Out of Stock' : 'Reserve Now (₱500)'}
+            <div className="flex items-center gap-3">
+              <button className="px-3 py-1 border rounded" onClick={() => setQty((q) => Math.max(1, q - 1))}>-</button>
+              <span className="min-w-8 text-center">{qty}</span>
+              <button className="px-3 py-1 border rounded" onClick={() => setQty((q) => q + 1)}>+</button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={colorAddon.enabled} onChange={(e) => setColorAddon(s => ({ ...s, enabled: e.target.checked }))}/>
+                Color customization (+fee)
+              </label>
+              {colorAddon.enabled && (
+                <>
+                  <input className="border px-2 py-1 rounded" placeholder="e.g. Matte Black" value={colorAddon.color || ''} onChange={(e) => setColorAddon(s => ({ ...s, color: e.target.value }))}/>
+                  <input className="border px-2 py-1 rounded w-24" type="number" min={0} step="0.01" placeholder="Fee" value={String(colorAddon.fee)} onChange={(e) => setColorAddon(s => ({ ...s, fee: Number(e.target.value || 0) }))}/>
+                </>
+              )}
+            </div>
+
+            <button className="bg-[#8B1C1C] text-white px-6 py-2 rounded hover:bg-[#a82c2c]" onClick={addToCart}>
+              Add to Cart
             </button>
           </div>
 
