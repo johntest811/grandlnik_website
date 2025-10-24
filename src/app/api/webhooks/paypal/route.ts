@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
       }
 
       const notifiedItems: { id: string; product_id: string; quantity: number }[] = [];
+      let grandTotal = 0; // accumulate total for admin notify
+
       for (const id of ids) {
         const { data: userItem } = await supabase
           .from('user_items')
@@ -86,7 +88,6 @@ export async function POST(request: NextRequest) {
 
         if (!userItem) continue;
 
-        // Compute receipt context from DB
         const { data: product } = await supabase
           .from('products')
           .select('inventory, name, price')
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
         const addonsTotal = addonsLine;
         const discountValue = Number(userItem.meta?.voucher_discount || 0);
         const totalAmount = Math.max(0, subtotal + addonsTotal - discountValue);
+        grandTotal += totalAmount;
         const reservationFee = 500; // reservation flow charges 500 upfront
         const stockBefore = Number(product?.inventory ?? 0);
         const newInventory = Math.max(0, stockBefore - qty);
@@ -144,7 +146,7 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify({
               type: 'order_placed',
               items: notifiedItems,
-              total: totalAmount,
+              total: grandTotal,
             }),
           });
         } catch (notifyErr) {
