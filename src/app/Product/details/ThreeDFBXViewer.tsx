@@ -1,6 +1,7 @@
 "use client";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+// Replace three-stdlib with official examples (version-matched to `three`)
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
@@ -119,9 +120,9 @@ export default function ThreeDFBXViewer({ fbxUrls, width = 1200, height = 700 }:
     const setOutputCS = (r: any) => {
       const anyTHREE: any = THREE;
       if ("outputColorSpace" in r && anyTHREE.SRGBColorSpace !== undefined) {
-        r.outputColorSpace = anyTHREE.SRGBColorSpace; // r152+
+        r.outputColorSpace = anyTHREE.SRGBColorSpace;
       } else if ("outputEncoding" in r && anyTHREE.sRGBEncoding !== undefined) {
-        r.outputEncoding = anyTHREE.sRGBEncoding; // <= r151
+        r.outputEncoding = anyTHREE.sRGBEncoding;
       }
     };
     setOutputCS(renderer);
