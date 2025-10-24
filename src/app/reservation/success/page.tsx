@@ -73,55 +73,110 @@ function ReservationSuccessPageContent() {
             {/* Reservation Details */}
             <div className="mb-6">
               <h2 className="text-lg font-semibold mb-4 text-gray-800">Reservation Receipt</h2>
-              
-              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Reservation ID:</span>
-                  <span className="font-mono">{reservation?.id}</span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Product:</span>
-                  <span className="font-medium">{reservation?.meta?.product_name}</span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Quantity:</span>
-                  <span>{reservation?.quantity}</span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Dimensions:</span>
-                  <span>{reservation?.meta?.length}L × {reservation?.meta?.width}W × {reservation?.meta?.height}H cm</span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Reservation Fee Paid:</span>
-                  <span className="font-semibold text-green-600">₱500</span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total Product Price:</span>
-                  <span className="font-semibold">₱{(reservation?.meta?.product_price * reservation?.quantity).toLocaleString()}</span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Remaining Balance:</span>
-                  <span className="font-semibold text-[#8B1C1C]">₱{((reservation?.meta?.product_price * reservation?.quantity) - 500).toLocaleString()}</span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Payment ID:</span>
-                  <span className="font-mono text-xs">{reservation?.meta?.payment_id}</span>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Status:</span>
-                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
-                    AWAITING ADMIN APPROVAL
-                  </span>
-                </div>
-              </div>
+
+              {(() => {
+                const qty = Number(reservation?.quantity || 1);
+                const price = Number(reservation?.meta?.product_price || 0);
+                const addons: any[] = Array.isArray(reservation?.meta?.addons) ? reservation.meta.addons : [];
+                const addonsTotal = Number(reservation?.meta?.addons_total ?? (addons.reduce((s, a) => s + Number(a?.fee || 0), 0) * qty));
+                const discountValue =
+                  Number(reservation?.meta?.discount_value ?? reservation?.meta?.voucher_discount ?? 0);
+                const subtotal = Number(reservation?.meta?.subtotal ?? price * qty);
+                const total = Number(reservation?.meta?.total_amount ?? Math.max(0, subtotal + addonsTotal - discountValue));
+                const reservationFee = Number(reservation?.meta?.reservation_fee ?? 500);
+                const stockBefore = reservation?.meta?.product_stock_before ?? reservation?.meta?.product_inventory;
+                const stockAfter = reservation?.meta?.product_stock_after;
+                const dims = reservation?.meta?.custom_dimensions;
+                const branch = reservation?.meta?.selected_branch || '-';
+                const voucherCode = reservation?.meta?.voucher_code || null;
+
+                return (
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Reservation ID:</span>
+                      <span className="font-mono">{reservation?.id}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Product:</span>
+                      <span className="font-medium">{reservation?.meta?.product_name || '-'}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Quantity:</span>
+                      <span>{qty}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Branch:</span>
+                      <span>{branch}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Dimensions:</span>
+                      <span>
+                        {dims
+                          ? `${dims.width || '-'} x ${dims.height || '-'} x ${dims.thickness || '-'}`
+                          : '—'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Product Subtotal:</span>
+                      <span>₱{subtotal.toLocaleString()}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Add-ons:</span>
+                      <span>₱{addonsTotal.toLocaleString()}</span>
+                    </div>
+
+                    {voucherCode && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Discount ({voucherCode}):</span>
+                        <span className="text-green-700">-₱{Number(discountValue).toLocaleString()}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between text-sm font-semibold">
+                      <span>Total:</span>
+                      <span>₱{Number(total).toLocaleString()}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span>Reservation Fee (Paid Now):</span>
+                      <span>₱{reservationFee.toLocaleString()}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span>Balance Due:</span>
+                      <span>₱{Math.max(0, Number(total) - reservationFee).toLocaleString()}</span>
+                    </div>
+
+                    {typeof stockBefore !== 'undefined' && (
+                      <div className="flex justify-between text-xs text-gray-600 pt-2">
+                        <span>Stock Before:</span>
+                        <span>{String(stockBefore)}</span>
+                      </div>
+                    )}
+                    {typeof stockAfter !== 'undefined' && (
+                      <div className="flex justify-between text-xs text-gray-600">
+                        <span>Stock After:</span>
+                        <span>{String(stockAfter)}</span>
+                      </div>
+                    )}
+
+                    {Array.isArray(addons) && addons.length > 0 && (
+                      <div className="text-xs text-gray-600 pt-2">
+                        Add-ons:
+                        <ul className="list-disc ml-5">
+                          {addons.map((a, i) => (
+                            <li key={i}>{a.label || a.key}: ₱{Number(a.fee || 0).toLocaleString()} {a.value ? `(${a.value})` : ''}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Next Steps */}

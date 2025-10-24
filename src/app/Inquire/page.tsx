@@ -199,9 +199,9 @@ export default function InquirePage() {
 
       <section className="my-12">
         <iframe
-          src="https://www.google.com/maps/d/u/0/embed?mid=1ghVaKLQIj0GoKnNNVL2cr7duCQMC-B4&ehbc=2E312F"
+          src="https://www.google.com/maps/d/u/0/embed?mid=1ODMZWBR-GH7nYbynYOu24cMlaCrD5Ns&ehbc=2E312F&noprof=1"
           width="100%"
-          height="500"
+          height="700"
           allowFullScreen
           loading="lazy"
           className="w-full border-none"

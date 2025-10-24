@@ -307,6 +307,9 @@ export default function ProfileReservePage() {
                         <span className="font-medium">Quantity:</span> {item.quantity}
                       </div>
                       <div>
+                        <span className="font-medium">Price:</span> ₱{Number(item.price ?? product?.price ?? 0).toLocaleString()}
+                      </div>
+                      <div>
                         <span className="font-medium">Created:</span> {new Date(item.created_at).toLocaleDateString()}
                       </div>
                       {item.payment_status && (
@@ -401,6 +404,9 @@ export default function ProfileReservePage() {
                       <span className="font-medium">Updated:</span> {new Date(showFullReceipt.item.updated_at).toLocaleString()}
                     </div>
                   )}
+                  <div>
+                    <span className="font-medium">Price:</span> ₱{Number(showFullReceipt.item.price ?? showFullReceipt.product?.price ?? 0).toLocaleString()}
+                  </div>
                 </div>
 
                 {showFullReceipt.item.meta && (

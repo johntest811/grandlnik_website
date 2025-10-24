@@ -175,30 +175,22 @@ export async function POST(request: NextRequest) {
         created_at: now,
       };
 
-      const notifRow = orderData.product_id
-        ? { ...baseNotification, product_id: orderData.product_id }
-        : baseNotification;
-
-      const { error: notifErr } = await supabase
-        .from("user_notifications")
-        .insert(notifRow);
-
-      if (notifErr) {
-        console.warn("user_notifications insert error:", notifErr.message);
+      const { error: notifError } = await supabase.from("user_notifications").insert(baseNotification);
+      if (notifError) {
+        console.error("Failed to insert user notification:", notifError);
       }
     }
 
     if (shouldSendEmail && mailTransporter && userEmail) {
       try {
         await mailTransporter.sendMail({
-          from: process.env.GMAIL_FROM || process.env.GMAIL_USER,
+          from: process.env.GMAIL_FROM || process.env.GMAIL_USER!,
           to: userEmail,
           subject: `Order Status: ${statusDisplay}`,
-          text: `${productName} - ${message}`,
-          html: `<p><strong>${productName}</strong></p><p>${message}</p>`
+          html: `<p>${message}</p><p>Order ID: ${userItemId}</p>`,
         });
-      } catch (e: any) {
-        console.warn("Email send error:", e?.message || e);
+      } catch (mailErr) {
+        console.error("Email send failed:", mailErr);
       }
     }
 

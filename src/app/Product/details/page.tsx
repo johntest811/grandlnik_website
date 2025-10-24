@@ -22,6 +22,9 @@ function ProductDetailsPageContent() {
   const [product, setProduct] = useState<any>(null);
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [show3D, setShow3D] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [adding, setAdding] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -38,6 +41,12 @@ function ProductDetailsPageContent() {
     };
     fetchProduct();
   }, [productId]);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data?.user?.id || null);
+    });
+  }, []);
 
   if (!product) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -100,6 +109,35 @@ function ProductDetailsPageContent() {
 
     // Redirect to reservation form with product ID
     router.push(`/reservation?productId=${product.id}`);
+  };
+
+  const handleAddToCart = async () => {
+    if (!userId || !product) {
+      alert("Please sign in to add to cart.");
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          productId: product.id,
+          quantity,
+          meta: {
+            selected_image: images[carouselIdx] || null,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to add to cart");
+      router.push("/profile/cart");
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setAdding(false);
+    }
   };
 
   const isOutOfStock = product.inventory <= 0;
@@ -233,6 +271,32 @@ function ProductDetailsPageContent() {
               }`}
             >
               {isOutOfStock ? 'Out of Stock' : 'Reserve Now (₱500)'}
+            </button>
+          </div>
+
+          {/* Quantity Selector and Add to Cart Button */}
+          <div className="flex items-center gap-3 mt-4">
+            <div className="flex items-center border rounded">
+              <button
+                onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                className="px-3 py-2"
+              >
+                -
+              </button>
+              <span className="px-4 text-black">{quantity}</span>
+              <button
+                onClick={() => setQuantity(q => q + 1)}
+                className="px-3 py-2"
+              >
+                +
+              </button>
+            </div>
+            <button
+              onClick={handleAddToCart}
+              disabled={adding}
+              className="px-5 py-2 bg-[#8B1C1C] text-white rounded hover:bg-[#a83232]"
+            >
+              {adding ? "Adding..." : "Add to Cart"}
             </button>
           </div>
 

@@ -17,29 +17,43 @@ export async function GET(request: NextRequest) {
       .from('user_items')
       .select('*')
       .eq('user_id', userId)
-      .eq('item_type', 'cart')
+      .eq('item_type', 'order')
+      .eq('order_status', 'cart')
       .order('created_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ items: data ?? [] });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'Failed to load cart' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to load cart' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const { userId, productId, quantity = 1, meta = {} } = await request.json();
-    if (!userId || !productId) return NextResponse.json({ error: 'Missing userId or productId' }, { status: 400 });
+    if (!userId || !productId) {
+      return NextResponse.json({ error: 'Missing userId or productId' }, { status: 400 });
+    }
 
-    // If same product already in cart, merge quantities
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('price')
+      .eq('id', productId)
+      .single();
+
+    if (productError || !product) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+
+    const productPrice = Number(product.price || 0);
+
     const { data: existing } = await supabase
       .from('user_items')
-      .select('*')
+      .select('id, quantity, meta')
       .eq('user_id', userId)
-      .eq('item_type', 'cart')
+      .eq('item_type', 'order')
+      .eq('order_status', 'cart')
       .eq('product_id', productId)
-      .limit(1)
       .maybeSingle();
 
     if (existing) {
@@ -49,6 +63,7 @@ export async function POST(request: NextRequest) {
         .update({
           quantity: nextQty,
           meta: { ...(existing.meta || {}), ...(meta || {}) },
+          price: productPrice,
           updated_at: new Date().toISOString()
         })
         .eq('id', existing.id)
@@ -64,10 +79,12 @@ export async function POST(request: NextRequest) {
       .insert([{
         user_id: userId,
         product_id: productId,
-        item_type: 'cart',
+        item_type: 'order',
+        order_status: 'cart',
         status: 'active',
         quantity: Math.max(1, Number(quantity || 1)),
-        meta: { ...meta },
+        meta,
+        price: productPrice,
         created_at: new Date().toISOString()
       }])
       .select()
@@ -75,8 +92,8 @@ export async function POST(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ item: data });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'Failed to add to cart' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to add to cart' }, { status: 500 });
   }
 }
 
@@ -85,22 +102,23 @@ export async function PATCH(request: NextRequest) {
     const { id, quantity, meta } = await request.json();
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-    const update: any = { updated_at: new Date().toISOString() };
-    if (typeof quantity === 'number') update.quantity = Math.max(1, quantity);
-    if (meta) update.meta = meta;
+    const payload: any = { updated_at: new Date().toISOString() };
+    if (typeof quantity === 'number') payload.quantity = Math.max(1, quantity);
+    if (meta) payload.meta = meta;
 
     const { data, error } = await supabase
       .from('user_items')
-      .update(update)
+      .update(payload)
       .eq('id', id)
-      .eq('item_type', 'cart')
+      .eq('item_type', 'order')
+      .eq('order_status', 'cart')
       .select()
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ item: data });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'Failed to update cart' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to update cart' }, { status: 500 });
   }
 }
 
@@ -116,7 +134,8 @@ export async function DELETE(request: NextRequest) {
         .from('user_items')
         .delete()
         .eq('user_id', userId)
-        .eq('item_type', 'cart');
+        .eq('item_type', 'order')
+        .eq('order_status', 'cart');
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true, cleared: true });
     }
@@ -127,11 +146,12 @@ export async function DELETE(request: NextRequest) {
       .from('user_items')
       .delete()
       .eq('id', id)
-      .eq('item_type', 'cart');
+      .eq('item_type', 'order')
+      .eq('order_status', 'cart');
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'Failed to remove item' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to remove item' }, { status: 500 });
   }
 }

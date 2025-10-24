@@ -13,6 +13,8 @@ const PAYPAL_BASE_URL = PAYPAL_ENVIRONMENT === 'sandbox'
   ? 'https://api-m.sandbox.paypal.com' 
   : 'https://api-m.paypal.com';
 
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_ORIGIN || 'https://adminside-grandlink.vercel.app';
+
 async function getPayPalAccessToken() {
   const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString('base64');
   
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid order data' }, { status: 400 });
       }
 
+      const notifiedItems: { id: string; product_id: string; quantity: number }[] = [];
       for (const id of ids) {
         const { data: userItem } = await supabase
           .from('user_items')
@@ -83,10 +86,29 @@ export async function POST(request: NextRequest) {
 
         if (!userItem) continue;
 
+        // Compute receipt context from DB
+        const { data: product } = await supabase
+          .from('products')
+          .select('inventory, name, price')
+          .eq('id', userItem.product_id)
+          .single();
+
+        const unit = Number(product?.price || 0);
+        const qty = Number(userItem.quantity || 1);
+        const addons: any[] = Array.isArray(userItem.meta?.addons) ? userItem.meta.addons : [];
+        const addonsLine = addons.reduce((s, a) => s + Number(a?.fee || 0), 0) * qty;
+        const subtotal = unit * qty;
+        const addonsTotal = addonsLine;
+        const discountValue = Number(userItem.meta?.voucher_discount || 0);
+        const totalAmount = Math.max(0, subtotal + addonsTotal - discountValue);
+        const reservationFee = 500; // reservation flow charges 500 upfront
+        const stockBefore = Number(product?.inventory ?? 0);
+        const newInventory = Math.max(0, stockBefore - qty);
+
         await supabase
           .from('user_items')
-          .update({ 
-            item_type: 'reservation', // ensure it's a reservation/order now
+          .update({
+            item_type: 'reservation',
             status: 'reserved',
             order_status: 'reserved',
             order_progress: 'payment_confirmed',
@@ -96,35 +118,37 @@ export async function POST(request: NextRequest) {
               ...userItem.meta,
               payment_confirmed_at: new Date().toISOString(),
               payment_method: 'paypal',
-              paypal_order_id: orderId
-            }
+              paypal_order_id: orderId,
+              subtotal,
+              addons_total: addonsTotal,
+              discount_value: discountValue,
+              total_amount: totalAmount,
+              reservation_fee: reservationFee,
+              product_stock_before: stockBefore,
+              product_stock_after: newInventory,
+            },
           })
           .eq('id', id);
 
-        const { data: product } = await supabase
-          .from('products')
-          .select('inventory, name')
-          .eq('id', userItem.product_id)
-          .single();
-
         if (product) {
-          const newInventory = Math.max(0, (product.inventory || 0) - userItem.quantity);
           await supabase.from('products').update({ inventory: newInventory }).eq('id', userItem.product_id);
+          notifiedItems.push({ id, product_id: userItem.product_id, quantity: userItem.quantity });
+        }
+      }
 
-          // Notify admin about order
-          try {
-            await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifyServers`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                type: 'order_placed',
-                items: [{ id, product_id: userItem.product_id, quantity: userItem.quantity }],
-                total: null
-              })
-            });
-          } catch (e) {
-            console.warn('Admin notify failed:', e);
-          }
+      if (notifiedItems.length) {
+        try {
+          await fetch(`${ADMIN_URL}/api/notify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'order_placed',
+              items: notifiedItems,
+              total: totalAmount,
+            }),
+          });
+        } catch (notifyErr) {
+          console.warn('Admin notify failed:', notifyErr);
         }
       }
 

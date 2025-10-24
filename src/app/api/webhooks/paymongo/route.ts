@@ -6,6 +6,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_ORIGIN || "https://adminside-grandlink.vercel.app";
+
 export async function POST(request: NextRequest) {
   try {
     console.log('📦 PayMongo webhook received');
@@ -14,23 +16,30 @@ export async function POST(request: NextRequest) {
 
     // PayMongo paid event
     if (data?.attributes?.type === 'checkout_session.payment.paid') {
-      const session = data?.attributes?.data; // checkout_session object
+      const session = data?.attributes?.data;
       const sessionId = data?.id || session?.id || data?.attributes?.reference_number || 'unknown';
-      const amountPaid = (session?.attributes?.amount || data?.attributes?.amount || 0) / 100; // centavos to PHP
+      const amountPaid = (session?.attributes?.amount || data?.attributes?.amount || 0) / 100;
 
+      const meta = session?.attributes?.metadata || {};
       const userItemIdsCsv =
+        meta?.user_item_ids ||
         session?.attributes?.metadata?.user_item_ids ||
-        session?.attributes?.metadata?.user_item_id ||
-        session?.attributes?.metadata?.user_item ||
-        session?.attributes?.metadata?.user_items ||
         '';
       const ids: string[] = String(userItemIdsCsv).split(',').map((s: string) => s.trim()).filter(Boolean);
+
+      // Pull receipt context from metadata
+      const subtotal = Number(meta?.subtotal || 0);
+      const addonsTotal = Number(meta?.addons_total || 0);
+      const discountValue = Number(meta?.discount_value || 0);
+      const paymentType = meta?.payment_type || 'order';
+      const reservationFee = Number(meta?.reservation_fee || (paymentType === 'reservation' ? 500 : 0));
 
       if (ids.length === 0) {
         console.error('❌ No user_item_id(s) in webhook data');
         return NextResponse.json({ error: 'Invalid webhook data' }, { status: 400 });
       }
 
+      const notifiedItems: { id: string; product_id: string; quantity: number }[] = [];
       for (const id of ids) {
         const { data: userItem } = await supabase
           .from('user_items')
@@ -39,6 +48,16 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (!userItem) continue;
+
+        // Fetch product to track stock delta
+        const { data: product } = await supabase
+          .from('products')
+          .select('inventory, name')
+          .eq('id', userItem.product_id)
+          .single();
+
+        const stockBefore = Number(product?.inventory ?? 0);
+        const newInventory = Math.max(0, stockBefore - Number(userItem.quantity || 0));
 
         await supabase
           .from('user_items')
@@ -55,36 +74,35 @@ export async function POST(request: NextRequest) {
               amount_paid: amountPaid,
               payment_session_id: sessionId,
               payment_method: 'paymongo',
+              subtotal,
+              addons_total: addonsTotal,
+              discount_value: discountValue,
+              reservation_fee: reservationFee,
+              product_stock_before: stockBefore,
+              product_stock_after: newInventory,
             },
           })
           .eq('id', id);
 
-        // Deduct inventory
-        if (userItem.product_id && userItem.quantity) {
-          const { data: product } = await supabase
-            .from('products')
-            .select('inventory, name')
-            .eq('id', userItem.product_id)
-            .single();
-          if (product) {
-            const newInventory = Math.max(0, (product.inventory || 0) - userItem.quantity);
-            await supabase.from('products').update({ inventory: newInventory }).eq('id', userItem.product_id);
+        if (product) {
+          await supabase.from('products').update({ inventory: newInventory }).eq('id', userItem.product_id);
+          notifiedItems.push({ id, product_id: userItem.product_id, quantity: userItem.quantity });
+        }
+      }
 
-            // Notify admin about order
-            try {
-              await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifyServers`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  type: 'order_placed',
-                  items: [{ id, product_id: userItem.product_id, quantity: userItem.quantity }],
-                  total: amountPaid
-                })
-              });
-            } catch (e) {
-              console.warn('Admin notify failed:', e);
-            }
-          }
+      if (notifiedItems.length) {
+        try {
+          await fetch(`${ADMIN_URL}/api/notify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'order_placed',
+              items: notifiedItems,
+              total: amountPaid,
+            }),
+          });
+        } catch (notifyErr) {
+          console.warn('Admin notify failed:', notifyErr);
         }
       }
 
