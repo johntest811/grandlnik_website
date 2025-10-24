@@ -232,6 +232,10 @@ export default function ProfileReservePage() {
     return product.image1 || product.image2 || "/no-image.png";
   };
 
+  // Helper to safely get unit price
+  const getItemUnitPrice = (it: UserItem, prod?: Product) =>
+    Number(it?.meta?.product_price ?? prod?.price ?? 0);
+
   if (loading) {
     return (
       <section className="flex-1 flex flex-col px-8 py-8">
@@ -307,7 +311,8 @@ export default function ProfileReservePage() {
                         <span className="font-medium">Quantity:</span> {item.quantity}
                       </div>
                       <div>
-                        <span className="font-medium">Price:</span> ₱{Number(item.price ?? product?.price ?? 0).toLocaleString()}
+                        {/* Price (unit) */}
+                        <span className="font-medium">Price:</span> ₱{getItemUnitPrice(item, product).toLocaleString()}
                       </div>
                       <div>
                         <span className="font-medium">Created:</span> {new Date(item.created_at).toLocaleDateString()}
@@ -405,7 +410,8 @@ export default function ProfileReservePage() {
                     </div>
                   )}
                   <div>
-                    <span className="font-medium">Price:</span> ₱{Number(showFullReceipt.item.price ?? showFullReceipt.product?.price ?? 0).toLocaleString()}
+                    {/* Price (unit) */}
+                    <span className="font-medium">Price:</span> ₱{getItemUnitPrice(showFullReceipt.item, showFullReceipt.product).toLocaleString()}
                   </div>
                 </div>
 
