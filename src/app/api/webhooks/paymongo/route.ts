@@ -9,34 +9,29 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     console.log('📦 PayMongo webhook received');
-    
-    const body = await request.json();
-    const { data } = body;
+    const payload = await request.json();
+    const data = payload?.data;
 
-    // After you parsed the incoming payload and have `sessionData` (usually payload.data)
-    const sessionId =
-      String(
-        (sessionData && (sessionData.id || sessionData.reference_number)) ||
-        (payload?.data?.id) ||
-        (payload?.id) ||
-        ''
-      );
-
+    // PayMongo paid event
     if (data?.attributes?.type === 'checkout_session.payment.paid') {
-      const sessionData = data.attributes.data;
-      const userItemIdsCsv = sessionData?.attributes?.metadata?.user_item_ids;
-      const userItemId = sessionData?.attributes?.metadata?.user_item_id;
-      const userItemIds: string[] = userItemIdsCsv
-        ? String(userItemIdsCsv).split(',').map(s => s.trim()).filter(Boolean)
-        : (userItemId ? [userItemId] : []);
+      const session = data?.attributes?.data; // checkout_session object
+      const sessionId = data?.id || session?.id || data?.attributes?.reference_number || 'unknown';
+      const amountPaid = (session?.attributes?.amount || data?.attributes?.amount || 0) / 100; // centavos to PHP
 
-      if (userItemIds.length === 0) {
+      const userItemIdsCsv =
+        session?.attributes?.metadata?.user_item_ids ||
+        session?.attributes?.metadata?.user_item_id ||
+        session?.attributes?.metadata?.user_item ||
+        session?.attributes?.metadata?.user_items ||
+        '';
+      const ids: string[] = String(userItemIdsCsv).split(',').map((s: string) => s.trim()).filter(Boolean);
+
+      if (ids.length === 0) {
         console.error('❌ No user_item_id(s) in webhook data');
         return NextResponse.json({ error: 'Invalid webhook data' }, { status: 400 });
       }
 
-      for (const id of userItemIds) {
-        // Get user_item details with product info
+      for (const id of ids) {
         const { data: userItem } = await supabase
           .from('user_items')
           .select('product_id, quantity, meta')
@@ -48,11 +43,12 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('user_items')
           .update({
+            item_type: 'reservation',
             status: 'reserved',
             order_status: 'reserved',
             order_progress: 'payment_confirmed',
             payment_status: 'completed',
-            payment_id: sessionId, // <-- now defined
+            payment_id: sessionId,
             meta: {
               ...userItem.meta,
               payment_confirmed_at: new Date().toISOString(),
@@ -67,22 +63,36 @@ export async function POST(request: NextRequest) {
         if (userItem.product_id && userItem.quantity) {
           const { data: product } = await supabase
             .from('products')
-            .select('inventory')
+            .select('inventory, name')
             .eq('id', userItem.product_id)
             .single();
           if (product) {
             const newInventory = Math.max(0, (product.inventory || 0) - userItem.quantity);
             await supabase.from('products').update({ inventory: newInventory }).eq('id', userItem.product_id);
+
+            // Notify admin about order
+            try {
+              await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifyServers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  type: 'order_placed',
+                  items: [{ id, product_id: userItem.product_id, quantity: userItem.quantity }],
+                  total: amountPaid
+                })
+              });
+            } catch (e) {
+              console.warn('Admin notify failed:', e);
+            }
           }
         }
       }
 
-      console.log('✅ PayMongo webhook processed - Order awaiting admin acceptance');
+      console.log('✅ PayMongo webhook processed');
       return NextResponse.json({ status: 'success' });
     }
 
     return NextResponse.json({ status: 'ignored' });
-
   } catch (error: any) {
     console.error('💥 Webhook processing error:', error);
     return NextResponse.json(

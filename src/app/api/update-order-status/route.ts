@@ -175,12 +175,17 @@ export async function POST(request: NextRequest) {
         created_at: now,
       };
 
-      const notifRow = orderData.product_id ? { ...baseNotification, product_id: orderData.product_id } : baseNotification;
+      const notifRow = orderData.product_id
+        ? { ...baseNotification, product_id: orderData.product_id }
+        : baseNotification;
 
       const { error: notifErr } = await supabase
         .from("user_notifications")
         .insert(notifRow);
-      if (notifErr) console.warn("Notification insert error:", notifErr);
+
+      if (notifErr) {
+        console.warn("user_notifications insert error:", notifErr.message);
+      }
     }
 
     if (shouldSendEmail && mailTransporter && userEmail) {
@@ -190,11 +195,10 @@ export async function POST(request: NextRequest) {
           to: userEmail,
           subject: `Order Status: ${statusDisplay}`,
           text: `${productName} - ${message}`,
-          html: `<p><strong>${productName}</strong> - ${message}</p>`,
+          html: `<p><strong>${productName}</strong></p><p>${message}</p>`
         });
-        console.log("✉️ Email sent to:", userEmail, "status:", statusDisplay);
-      } catch (emailErr) {
-        console.warn("Email send error:", emailErr);
+      } catch (e: any) {
+        console.warn("Email send error:", e?.message || e);
       }
     }
 

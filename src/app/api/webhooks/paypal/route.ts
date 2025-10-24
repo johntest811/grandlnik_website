@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('user_items')
           .update({ 
+            item_type: 'reservation', // ensure it's a reservation/order now
             status: 'reserved',
             order_status: 'reserved',
             order_progress: 'payment_confirmed',
@@ -102,13 +103,28 @@ export async function POST(request: NextRequest) {
 
         const { data: product } = await supabase
           .from('products')
-          .select('inventory')
+          .select('inventory, name')
           .eq('id', userItem.product_id)
           .single();
 
         if (product) {
           const newInventory = Math.max(0, (product.inventory || 0) - userItem.quantity);
           await supabase.from('products').update({ inventory: newInventory }).eq('id', userItem.product_id);
+
+          // Notify admin about order
+          try {
+            await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/notifyServers`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'order_placed',
+                items: [{ id, product_id: userItem.product_id, quantity: userItem.quantity }],
+                total: null
+              })
+            });
+          } catch (e) {
+            console.warn('Admin notify failed:', e);
+          }
         }
       }
 

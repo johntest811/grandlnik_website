@@ -161,97 +161,110 @@ async function createPayPalOrder(orderData: any) {
 export async function POST(request: NextRequest) {
   try {
     const {
-      amount,
+      amount,                   // optional when user_item_ids provided (server will recompute)
       currency = 'PHP',
-      user_item_id,
+      user_item_id,             // legacy single
+      user_item_ids,            // NEW: array of multiple cart items
       product_name,
       payment_type = 'reservation',
       payment_method = 'paymongo',
       success_url,
-      cancel_url
+      cancel_url,
+      voucher
     } = await request.json();
 
-    console.log('💳 Creating payment session for user_item:', user_item_id);
-    console.log('💰 Amount:', amount, currency);
-    console.log('🎯 Payment method:', payment_method);
+    const ids: string[] = Array.isArray(user_item_ids)
+      ? user_item_ids
+      : (user_item_id ? [user_item_id] : []);
 
-    // Validate required fields
-    if (!user_item_id || !amount || !success_url || !cancel_url) {
-      return NextResponse.json(
-        { error: 'Missing required payment data' },
-        { status: 400 }
-      );
+    if ((!ids || ids.length === 0) || !success_url || !cancel_url) {
+      return NextResponse.json({ error: 'Missing required data' }, { status: 400 });
     }
 
-    // Verify user_item exists
-    const { data: userItem, error: fetchError } = await supabase
+    // Recompute total from DB for security
+    const { data: rows, error: itemsErr } = await supabase
       .from('user_items')
-      .select('id, status, payment_status')
-      .eq('id', user_item_id)
-      .single();
+      .select('id, quantity, meta, product_id, item_type')
+      .in('id', ids);
 
-    if (fetchError || !userItem) {
-      console.error('❌ User item not found:', fetchError);
-      return NextResponse.json(
-        { error: 'Reservation not found' },
-        { status: 404 }
-      );
+    if (itemsErr || !rows || rows.length === 0) {
+      return NextResponse.json({ error: 'Items not found' }, { status: 404 });
     }
 
-    if (userItem.payment_status === 'completed') {
-      return NextResponse.json(
-        { error: 'Payment already completed' },
-        { status: 400 }
-      );
+    // Fetch products and compute total
+    const productIds = Array.from(new Set(rows.map(r => r.product_id)));
+    const { data: products, error: prodErr } = await supabase
+      .from('products')
+      .select('id, name, price')
+      .in('id', productIds);
+
+    if (prodErr) {
+      return NextResponse.json({ error: 'Products fetch failed' }, { status: 500 });
     }
+
+    const productMap = new Map((products || []).map(p => [p.id, p]));
+    let subtotal = 0;
+    let addonsTotal = 0;
+
+    for (const r of rows) {
+      const p = productMap.get(r.product_id);
+      const unit = Number(p?.price || 0);
+      const qty = Number(r.quantity || 1);
+      subtotal += unit * qty;
+      const addons: any[] = Array.isArray(r.meta?.addons) ? r.meta.addons : [];
+      const lineAddon = addons.reduce((s, a) => s + Number(a?.fee || 0), 0) * qty;
+      addonsTotal += lineAddon;
+    }
+    let recomputed = subtotal + addonsTotal;
+
+    // Apply voucher on server as well (optional trust)
+    if (voucher?.type === 'percent') recomputed -= recomputed * (Number(voucher.value || 0) / 100);
+    else if (voucher?.type === 'amount') recomputed -= Number(voucher.value || 0);
+    if (recomputed < 0) recomputed = 0;
+
+    const totalAmount = recomputed;
+
+    // Mark selected cart items as "pending_payment" (soft lock)
+    await supabase
+      .from('user_items')
+      .update({ order_status: 'pending_payment', status: 'active', updated_at: new Date().toISOString() })
+      .in('id', ids);
+
+    // Create payment session for multiple items:
+    const displayName = product_name || (rows.length === 1 ? (productMap.get(rows[0].product_id)?.name || 'Item') : `Cart items (${rows.length})`);
 
     let sessionId: string;
     let checkoutUrl: string;
 
-    // Create payment session based on method
     if (payment_method === 'paypal') {
       const paypalResult = await createPayPalOrder({
-        amount,
-        currency: 'USD', // PayPal uses USD
-        user_item_id,
-        product_name,
+        amount: totalAmount,
+        currency: 'USD',
+        user_item_id: ids.join(','), // CSV for webhook
+        product_name: displayName,
         success_url,
         cancel_url
       });
-      
       sessionId = paypalResult.sessionId;
       checkoutUrl = paypalResult.checkoutUrl;
     } else {
-      // Default to PayMongo
       const paymongoResult = await createPayMongoSession({
-        amount,
-        currency: 'PHP', // PayMongo uses PHP
-        user_item_id,
-        product_name,
+        amount: totalAmount,
+        currency: 'PHP',
+        user_item_id: ids.join(','), // CSV for webhook
+        product_name: displayName,
         success_url,
         cancel_url
       });
-      
       sessionId = paymongoResult.sessionId;
       checkoutUrl = paymongoResult.checkoutUrl;
     }
 
-    console.log('✅ Payment session created:', sessionId);
-    console.log('🔗 Checkout URL:', checkoutUrl);
-
-    return NextResponse.json({
-      sessionId,
-      checkoutUrl,
-      success: true
-    });
-
+    return NextResponse.json({ sessionId, checkoutUrl, success: true });
   } catch (error: any) {
     console.error('💥 Payment session creation error:', error);
     return NextResponse.json(
-      { 
-        error: error.message || 'Failed to create payment session',
-        details: error.stack
-      },
+      { error: error.message || 'Failed to create payment session' },
       { status: 500 }
     );
   }

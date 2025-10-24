@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,94 +7,131 @@ const supabase = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+    if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
 
-export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get("userId");
-  if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+    const { data, error } = await supabase
+      .from('user_items')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('item_type', 'cart')
+      .order('created_at', { ascending: false });
 
-  const { data, error } = await supabase
-    .from("user_items")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("item_type", "cart")
-    .order("created_at", { ascending: false });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ items: data ?? [] });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ items: data ?? [] });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'Failed to load cart' }, { status: 500 });
+  }
 }
 
-export async function POST(req: NextRequest) {
-  const { userId, productId, quantity = 1, meta = {} } = await req.json();
-  if (!userId || !productId) return NextResponse.json({ error: "userId and productId required" }, { status: 400 });
+export async function POST(request: NextRequest) {
+  try {
+    const { userId, productId, quantity = 1, meta = {} } = await request.json();
+    if (!userId || !productId) return NextResponse.json({ error: 'Missing userId or productId' }, { status: 400 });
 
-  // Upsert: if cart row exists for same product, bump quantity
-  const { data: existing } = await supabase
-    .from("user_items")
-    .select("id, quantity, meta")
-    .eq("user_id", userId)
-    .eq("product_id", productId)
-    .eq("item_type", "cart")
-    .limit(1)
-    .maybeSingle();
+    // If same product already in cart, merge quantities
+    const { data: existing } = await supabase
+      .from('user_items')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('item_type', 'cart')
+      .eq('product_id', productId)
+      .limit(1)
+      .maybeSingle();
 
-  if (existing) {
-    const newQty = Math.max(1, (existing.quantity || 1) + Number(quantity || 1));
+    if (existing) {
+      const nextQty = Math.max(1, Number(existing.quantity || 0) + Number(quantity || 0));
+      const { data, error } = await supabase
+        .from('user_items')
+        .update({
+          quantity: nextQty,
+          meta: { ...(existing.meta || {}), ...(meta || {}) },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ item: data, merged: true });
+    }
+
     const { data, error } = await supabase
-      .from("user_items")
-      .update({ quantity: newQty, meta: { ...(existing.meta || {}), ...meta }, updated_at: new Date().toISOString() })
-      .eq("id", existing.id)
+      .from('user_items')
+      .insert([{
+        user_id: userId,
+        product_id: productId,
+        item_type: 'cart',
+        status: 'active',
+        quantity: Math.max(1, Number(quantity || 1)),
+        meta: { ...meta },
+        created_at: new Date().toISOString()
+      }])
       .select()
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ item: data });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'Failed to add to cart' }, { status: 500 });
   }
-
-  const { data, error } = await supabase
-    .from("user_items")
-    .insert({
-      user_id: userId,
-      product_id: productId,
-      item_type: "cart",
-      status: "active",
-      quantity: Math.max(1, Number(quantity || 1)),
-      meta: meta,
-      created_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ item: data });
 }
 
-export async function PATCH(req: NextRequest) {
-  const { itemId, quantity, meta } = await req.json();
-  if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 });
+export async function PATCH(request: NextRequest) {
+  try {
+    const { id, quantity, meta } = await request.json();
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-  const patch: any = { updated_at: new Date().toISOString() };
-  if (typeof quantity === "number") patch.quantity = Math.max(1, quantity);
-  if (meta) patch.meta = meta;
+    const update: any = { updated_at: new Date().toISOString() };
+    if (typeof quantity === 'number') update.quantity = Math.max(1, quantity);
+    if (meta) update.meta = meta;
 
-  const { data, error } = await supabase
-    .from("user_items")
-    .update(patch)
-    .eq("id", itemId)
-    .eq("item_type", "cart")
-    .select()
-    .single();
+    const { data, error } = await supabase
+      .from('user_items')
+      .update(update)
+      .eq('id', id)
+      .eq('item_type', 'cart')
+      .select()
+      .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ item: data });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ item: data });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'Failed to update cart' }, { status: 500 });
+  }
 }
 
-export async function DELETE(req: NextRequest) {
-  const { itemId } = await req.json();
-  if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 });
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const userId = searchParams.get('userId');
+    const clear = searchParams.get('clear');
 
-  const { error } = await supabase.from("user_items").delete().eq("id", itemId).eq("item_type", "cart");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true });
+    if (clear === 'true' && userId) {
+      const { error } = await supabase
+        .from('user_items')
+        .delete()
+        .eq('user_id', userId)
+        .eq('item_type', 'cart');
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ success: true, cleared: true });
+    }
+
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+    const { error } = await supabase
+      .from('user_items')
+      .delete()
+      .eq('id', id)
+      .eq('item_type', 'cart');
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'Failed to remove item' }, { status: 500 });
+  }
 }
