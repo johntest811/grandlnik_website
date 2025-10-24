@@ -1,9 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-// Replace three-stdlib with official examples (version-matched to `three`)
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { FBXLoader, OrbitControls } from "three-stdlib";
 
 type Props = {
   fbxUrls: string[];
@@ -117,16 +115,11 @@ export default function ThreeDFBXViewer({ fbxUrls, width = 1200, height = 700 }:
     }
 
     // runtime-safe color management
-    const setOutputCS = (r: any) => {
-      const anyTHREE: any = THREE;
-      if ("outputColorSpace" in r && anyTHREE.SRGBColorSpace !== undefined) {
-        r.outputColorSpace = anyTHREE.SRGBColorSpace;
-      } else if ("outputEncoding" in r && anyTHREE.sRGBEncoding !== undefined) {
-        r.outputEncoding = anyTHREE.sRGBEncoding;
-      }
-    };
-    setOutputCS(renderer);
-
+    const sRGB = (THREE as any).sRGBEncoding ?? (THREE as any).SRGBColorSpace ?? (THREE as any).SRGBEncoding;
+    try {
+      if ("outputEncoding" in renderer && sRGB !== undefined) (renderer as any).outputEncoding = sRGB;
+      else if ("outputColorSpace" in renderer && sRGB !== undefined) (renderer as any).outputColorSpace = sRGB;
+    } catch (e) {}
     if ("physicallyCorrectLights" in renderer) try { (renderer as any).physicallyCorrectLights = true; } catch(e){}
 
     // Enhanced tone mapping for better reflections
