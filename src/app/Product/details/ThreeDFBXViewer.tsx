@@ -114,11 +114,14 @@ export default function ThreeDFBXViewer({ fbxUrls, width = 1200, height = 700 }:
       renderer.shadowMap.type = THREE.BasicShadowMap; // Performance mode
     }
 
-    // runtime-safe color management
-    const sRGB = (THREE as any).sRGBEncoding ?? (THREE as any).SRGBColorSpace ?? (THREE as any).SRGBEncoding;
+    // runtime-safe color management - use SRGBColorSpace for Three.js r152+
+    const sRGB = THREE.SRGBColorSpace ?? 3001; // SRGBColorSpace constant or fallback to sRGBEncoding value
     try {
-      if ("outputEncoding" in renderer && sRGB !== undefined) (renderer as any).outputEncoding = sRGB;
-      else if ("outputColorSpace" in renderer && sRGB !== undefined) (renderer as any).outputColorSpace = sRGB;
+      if ("outputColorSpace" in renderer) {
+        (renderer as any).outputColorSpace = sRGB;
+      } else if ("outputEncoding" in renderer) {
+        (renderer as any).outputEncoding = sRGB;
+      }
     } catch (e) {}
     if ("physicallyCorrectLights" in renderer) try { (renderer as any).physicallyCorrectLights = true; } catch(e){}
 

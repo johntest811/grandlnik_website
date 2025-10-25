@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
@@ -59,7 +59,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default function ProfileReservePage() {
+function ProfileReservePageContent() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<UserItem[]>([]);
@@ -441,5 +441,20 @@ export default function ProfileReservePage() {
         </div>
       )}
     </section>
+  );
+}
+
+export default function ProfileReservePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading reservations...</p>
+        </div>
+      </div>
+    }>
+      <ProfileReservePageContent />
+    </Suspense>
   );
 }
