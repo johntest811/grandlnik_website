@@ -388,7 +388,7 @@ export default function ProfileReservePage() {
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold">Reservation Details</h2>
+                <h2 className="text-xl font-bold text-black">Reservation Details</h2>
                 <button
                   onClick={() => setShowFullReceipt(null)}
                   className="text-gray-500 hover:text-gray-700"
@@ -399,29 +399,29 @@ export default function ProfileReservePage() {
 
               <div className="space-y-4">
                 <div className="border-b pb-4">
-                  <h3 className="font-semibold">{showFullReceipt.product.name}</h3>
-                  <p className="text-gray-600">Order ID: {showFullReceipt.item.id}</p>
+                  <h3 className="font-semibold text-black">{showFullReceipt.product.name}</h3>
+                  <p className="text-black font-medium">Order ID: {showFullReceipt.item.id}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
+                  <div className="text-black">
                     <span className="font-medium">Status:</span>
                     <span className={`ml-2 px-2 py-1 rounded text-xs ${getStatusColor(showFullReceipt.item.status)}`}>
                       {getStatusDisplay(showFullReceipt.item.status)}
                     </span>
                   </div>
-                  <div>
+                  <div className="text-black">
                     <span className="font-medium">Quantity:</span> {showFullReceipt.item.quantity}
                   </div>
-                  <div>
+                  <div className="text-black">
                     <span className="font-medium">Created:</span> {new Date(showFullReceipt.item.created_at).toLocaleString()}
                   </div>
                   {showFullReceipt.item.updated_at && (
-                    <div>
+                    <div className="text-black">
                       <span className="font-medium">Updated:</span> {new Date(showFullReceipt.item.updated_at).toLocaleString()}
                     </div>
                   )}
-                  <div>
+                  <div className="text-black">
                     {/* Price (unit) */}
                     <span className="font-medium">Price:</span> ₱{getItemUnitPrice(showFullReceipt.item, showFullReceipt.product).toLocaleString()}
                   </div>
@@ -429,8 +429,8 @@ export default function ProfileReservePage() {
 
                 {showFullReceipt.item.meta && (
                   <div className="border-t pt-4">
-                    <h4 className="font-medium mb-2">Additional Details:</h4>
-                    <pre className="text-xs bg-gray-100 p-3 rounded overflow-auto">
+                    <h4 className="font-medium mb-2 text-black">Additional Details:</h4>
+                    <pre className="text-xs bg-gray-100 p-3 rounded overflow-auto text-black">
                       {JSON.stringify(showFullReceipt.item.meta, null, 2)}
                     </pre>
                   </div>

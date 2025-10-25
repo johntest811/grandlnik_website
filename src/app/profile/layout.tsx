@@ -50,8 +50,8 @@ export default function ProfileLayout({ children }: { children: React.ReactNode 
     { label: "Overview", href: "/profile" },
     { label: "Cart", href: "/profile/cart" },
     { label: "Wishlist", href: "/profile/my-list" },
-    { label: "Orders", href: "/profile/order" },
     { label: "Reserve", href: "/profile/reserve" },
+    { label: "Orders", href: "/profile/order" },
     { label: "Completed", href: "/profile/completed" },
     { label: "Cancelled", href: "/profile/cancelled" },
   ];

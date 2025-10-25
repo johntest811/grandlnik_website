@@ -66,6 +66,8 @@ export async function POST(request: NextRequest) {
             order_progress: 'payment_confirmed',
             payment_status: 'completed',
             payment_id: sessionId,
+            total_paid: amountPaid,
+            payment_method: 'paymongo',
             meta: {
               ...userItem.meta,
               payment_confirmed_at: new Date().toISOString(),

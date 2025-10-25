@@ -114,6 +114,8 @@ export async function POST(request: NextRequest) {
             order_progress: 'payment_confirmed',
             payment_status: 'completed',
             payment_id: orderId,
+            total_paid: totalAmount,
+            payment_method: 'paypal',
             meta: {
               ...userItem.meta,
               payment_confirmed_at: new Date().toISOString(),

@@ -93,26 +93,26 @@ function ReservationSuccessPageContent() {
                 return (
                   <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Reservation ID:</span>
-                      <span className="font-mono">{reservation?.id}</span>
+                      <span className="text-black font-medium">Reservation ID:</span>
+                      <span className="font-mono text-black">{reservation?.id}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Product:</span>
-                      <span className="font-medium">{reservation?.meta?.product_name || '-'}</span>
+                      <span className="text-black font-medium">Product:</span>
+                      <span className="font-medium text-black">{reservation?.meta?.product_name || '-'}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Quantity:</span>
-                      <span>{qty}</span>
-                    </div>
-
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Branch:</span>
-                      <span>{branch}</span>
+                      <span className="text-black font-medium">Quantity:</span>
+                      <span className="text-black">{qty}</span>
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Dimensions:</span>
-                      <span>
+                      <span className="text-black font-medium">Branch:</span>
+                      <span className="text-black">{branch}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-black font-medium">Dimensions:</span>
+                      <span className="text-black">
                         {dims
                           ? `${dims.width || '-'} x ${dims.height || '-'} x ${dims.thickness || '-'}`
                           : '—'}
@@ -120,53 +120,53 @@ function ReservationSuccessPageContent() {
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Product Subtotal:</span>
-                      <span>₱{subtotal.toLocaleString()}</span>
+                      <span className="text-black font-medium">Product Subtotal:</span>
+                      <span className="text-black">₱{subtotal.toLocaleString()}</span>
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Add-ons:</span>
-                      <span>₱{addonsTotal.toLocaleString()}</span>
+                      <span className="text-black font-medium">Add-ons:</span>
+                      <span className="text-black">₱{addonsTotal.toLocaleString()}</span>
                     </div>
 
                     {voucherCode && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Discount ({voucherCode}):</span>
+                        <span className="text-black font-medium">Discount ({voucherCode}):</span>
                         <span className="text-green-700">-₱{Number(discountValue).toLocaleString()}</span>
                       </div>
                     )}
 
                     <div className="flex justify-between text-sm font-semibold">
-                      <span>Total:</span>
-                      <span>₱{Number(total).toLocaleString()}</span>
+                      <span className="text-black">Total:</span>
+                      <span className="text-black">₱{Number(total).toLocaleString()}</span>
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span>Reservation Fee (Paid Now):</span>
-                      <span>₱{reservationFee.toLocaleString()}</span>
+                      <span className="text-black font-medium">Reservation Fee (Paid Now):</span>
+                      <span className="text-black">₱{reservationFee.toLocaleString()}</span>
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span>Balance Due:</span>
-                      <span>₱{Math.max(0, Number(total) - reservationFee).toLocaleString()}</span>
+                      <span className="text-black font-medium">Balance Due:</span>
+                      <span className="text-black">₱{Math.max(0, Number(total) - reservationFee).toLocaleString()}</span>
                     </div>
 
                     {typeof stockBefore !== 'undefined' && (
-                      <div className="flex justify-between text-xs text-gray-600 pt-2">
-                        <span>Stock Before:</span>
+                      <div className="flex justify-between text-xs text-black pt-2">
+                        <span className="font-medium">Stock Before:</span>
                         <span>{String(stockBefore)}</span>
                       </div>
                     )}
                     {typeof stockAfter !== 'undefined' && (
-                      <div className="flex justify-between text-xs text-gray-600">
-                        <span>Stock After:</span>
+                      <div className="flex justify-between text-xs text-black">
+                        <span className="font-medium">Stock After:</span>
                         <span>{String(stockAfter)}</span>
                       </div>
                     )}
 
                     {Array.isArray(addons) && addons.length > 0 && (
-                      <div className="text-xs text-gray-600 pt-2">
-                        Add-ons:
+                      <div className="text-xs text-black pt-2">
+                        <span className="font-medium">Add-ons:</span>
                         <ul className="list-disc ml-5">
                           {addons.map((a, i) => (
                             <li key={i}>{a.label || a.key}: ₱{Number(a.fee || 0).toLocaleString()} {a.value ? `(${a.value})` : ''}</li>

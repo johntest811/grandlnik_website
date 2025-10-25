@@ -78,6 +78,16 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (!fetchError && userItem) {
+        // Calculate total amount from metadata
+        const unit = Number(userItem.meta?.unit_price || 0);
+        const qty = Number(userItem.quantity || 1);
+        const addons: any[] = Array.isArray(userItem.meta?.addons) ? userItem.meta.addons : [];
+        const addonsLine = addons.reduce((s, a) => s + Number(a?.fee || 0), 0) * qty;
+        const subtotal = unit * qty;
+        const addonsTotal = addonsLine;
+        const discountValue = Number(userItem.meta?.voucher_discount || 0);
+        const totalAmount = Math.max(0, subtotal + addonsTotal - discountValue);
+
         // Update user_item status
         await supabase
           .from('user_items')
@@ -85,6 +95,8 @@ export async function POST(request: NextRequest) {
             status: 'reserved',
             payment_status: 'completed',
             payment_id: orderId,
+            total_paid: totalAmount,
+            payment_method: 'paypal',
             meta: {
               ...userItem.meta,
               payment_confirmed_at: new Date().toISOString(),
