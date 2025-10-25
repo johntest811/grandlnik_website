@@ -164,7 +164,7 @@ export default function ProfileCompletedPage() {
         <input
           type="text"
           placeholder="Search completed orders"
-          className="w-full border rounded px-4 py-2 bg-gray-100 text-gray-700"
+          className="w-full border rounded px-4 py-2 bg-gray-100 text-black"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -172,12 +172,12 @@ export default function ProfileCompletedPage() {
       <hr className="mb-4" />
 
       {loading ? (
-        <div className="py-16 text-center text-gray-600">Loading...</div>
+        <div className="py-16 text-center text-black font-medium">Loading...</div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-1 items-center justify-center border rounded bg-white py-16">
           <div className="flex flex-col items-center">
             {/* <Image src="/no-orders.png" alt="No Completed" width={80} height={80} /> */}
-            <p className="mt-4 text-gray-600 text-lg font-medium">No completed orders</p>
+            <p className="mt-4 text-black text-lg font-medium">No completed orders</p>
           </div>
         </div>
       ) : (
@@ -190,9 +190,9 @@ export default function ProfileCompletedPage() {
                 <div className="flex gap-4">
                   <img src={img} className="w-20 h-20 object-cover rounded" alt={p?.name || "Product"} />
                   <div className="flex-1">
-                    <div className="font-bold">{p?.name || "Completed Item"}</div>
-                    <div className="text-sm text-gray-600">Order ID: {it.id}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="font-bold text-black">{p?.name || "Completed Item"}</div>
+                    <div className="text-sm text-black font-medium">Order ID: {it.id}</div>
+                    <div className="text-xs text-black">
                       Delivered: {new Date(it.updated_at || it.created_at).toLocaleString()}
                     </div>
                     <button

@@ -331,7 +331,7 @@ export default function ProfileOrderPage() {
                               className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
                                 done
                                   ? "bg-[#8B1C1C] text-white border-[#8B1C1C]"
-                                  : "bg-white text-gray-600 border-gray-300"
+                                  : "bg-white text-black border-gray-300"
                               }`}
                             >
                               {done ? "✓" : i + 1}

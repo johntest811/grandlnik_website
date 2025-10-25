@@ -69,6 +69,8 @@ function ProfileReservePageContent() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [showFullReceipt, setShowFullReceipt] = useState<{item: UserItem, product: Product} | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successItems, setSuccessItems] = useState<Array<{item: UserItem, product: Product}>>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -85,15 +87,9 @@ function ProfileReservePageContent() {
 
         setUserId(currentUserId);
 
-        // If redirected from a successful checkout, clear any remaining cart rows
-        try {
-          const shouldClear = searchParams?.get("clearCart") === "1";
-          if (shouldClear) {
-            await fetch(`/api/cart?clear=true&userId=${currentUserId}`, { method: "DELETE", cache: "no-store" });
-          }
-        } catch (e) {
-          console.warn("Could not clear cart after success:", e);
-        }
+        // Check if coming from successful payment
+        const paymentSuccess = searchParams?.get("payment") === "success";
+        const itemIdsParam = searchParams?.get("item_ids");
 
         // Fetch user's reservations
         const { data: userItems, error: itemsError } = await supabase
@@ -115,6 +111,8 @@ function ProfileReservePageContent() {
         const productIds = [...new Set(userItems?.map(item => item.product_id) || [])];
         const addressIds = [...new Set(userItems?.map(item => item.delivery_address_id).filter(Boolean) || [])];
 
+        let productsMap: Record<string, Product> = {};
+        
         // Fetch products
         if (productIds.length > 0) {
           const { data: products, error: productsError } = await supabase
@@ -123,7 +121,6 @@ function ProfileReservePageContent() {
             .in("id", productIds);
 
           if (!productsError && products) {
-            const productsMap: Record<string, Product> = {};
             products.forEach(p => {
               productsMap[p.id] = p;
             });
@@ -144,6 +141,21 @@ function ProfileReservePageContent() {
               addressesMap[a.id] = a;
             });
             setAddressesById(addressesMap);
+          }
+        }
+
+        // Show success modal if coming from payment
+        if (paymentSuccess && itemIdsParam) {
+          const itemIds = itemIdsParam.split(',');
+          const paidItems = (userItems || []).filter(item => itemIds.includes(item.id));
+          const itemsWithProducts = paidItems.map(item => ({
+            item,
+            product: productsMap[item.product_id] || {} as Product
+          })).filter(x => x.product.id);
+          
+          if (itemsWithProducts.length > 0) {
+            setSuccessItems(itemsWithProducts);
+            setShowSuccessModal(true);
           }
         }
 
@@ -266,7 +278,7 @@ function ProfileReservePageContent() {
           placeholder="Search reservations by product name, ID, or status"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="w-full border rounded px-4 py-2 bg-gray-100 text-gray-700"
+          className="w-full border rounded px-4 py-2 bg-gray-100 text-black"
         />
       </div>
       <hr className="mb-4" />
@@ -275,13 +287,13 @@ function ProfileReservePageContent() {
         <div className="flex flex-1 items-center justify-center border rounded bg-white">
           <div className="flex flex-col items-center py-16">
             {/* <Image src="/no-orders.png" alt="No Reservations" width={80} height={80} /> */}
-            <p className="mt-4 text-gray-600 text-lg font-medium">
+            <p className="mt-4 text-black text-lg font-medium">
               {query ? "No reservations match your search" : "No reservations yet"}
             </p>
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 ">
           {filtered.map((item) => {
             const product = productsById[item.product_id];
             const address = addressesById[item.delivery_address_id || ""];
@@ -306,19 +318,19 @@ function ProfileReservePageContent() {
                   <div className="flex-1">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <h3 className="font-semibold text-lg">
+                        <h3 className="font-semibold text-lg text-black">
                           {product?.name || "Unknown Product"}
                         </h3>
-                        <p className="text-gray-600 text-sm">
+                        <p className="text-black text-sm font-medium">
                           Order ID: {item.id.slice(0, 8)}...
                         </p>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(item.status)}`}>
+                      <span className={`px-3 py-1 rounded-full text-sm text-black font-medium ${getStatusColor(item.status)}`}>
                         {getStatusDisplay(item.status)}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
+                    <div className="grid grid-cols-2 gap-4 text-sm text-black mb-4">
                       <div>
                         <span className="font-medium">Quantity:</span> {item.quantity}
                       </div>
@@ -343,8 +355,8 @@ function ProfileReservePageContent() {
 
                     {item.special_instructions && (
                       <div className="mb-4">
-                        <span className="font-medium text-sm">Special Instructions:</span>
-                        <p className="text-sm text-gray-600 mt-1">{item.special_instructions}</p>
+                        <span className="font-medium text-sm text-black">Special Instructions:</span>
+                        <p className="text-sm text-black mt-1">{item.special_instructions}</p>
                       </div>
                     )}
 
@@ -435,6 +447,109 @@ function ProfileReservePageContent() {
                     </pre>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Success Modal */}
+      {showSuccessModal && successItems.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Success Header */}
+            <div className="bg-green-600 text-white px-6 py-8 text-center">
+              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-3xl font-bold mb-2">Payment Successful!</h2>
+              <p className="text-green-100">Your items have been reserved successfully</p>
+            </div>
+
+            {/* Receipt Content */}
+            <div className="p-6">
+              <h3 className="text-xl font-bold mb-4 text-black">Reservation Receipt</h3>
+              
+              {successItems.map(({item, product}) => (
+                <div key={item.id} className="mb-6 pb-6 border-b last:border-b-0">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="font-medium text-black">Reservation ID:</p>
+                      <p className="text-black font-medium">{item.id.slice(0, 8).toUpperCase()}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-black">Date:</p>
+                      <p className="text-black font-medium">{new Date(item.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="font-medium text-black">Product:</p>
+                      <p className="text-black font-medium">{product.name || 'Product'}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-black">Quantity:</p>
+                      <p className="text-black font-medium">{item.quantity}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-black">Status:</p>
+                      <p className="text-green-600 font-medium">Reserved</p>
+                    </div>
+                    {item.meta?.voucher_code && (
+                      <div className="col-span-2">
+                        <p className="font-medium text-black">Discount Applied:</p>
+                        <p className="text-black font-medium">{item.meta.voucher_code}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* What's Next Section */}
+              <div className="mt-6 bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-bold text-black mb-3">What's Next?</h4>
+                <ol className="space-y-2 text-sm text-black">
+                  <li className="flex items-start">
+                    <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center mr-2 text-xs">1</span>
+                    <div>
+                      <p className="font-medium">Waiting for Admin Approval</p>
+                      <p className="text-black">Your reservation is currently being reviewed by our admin team.</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center mr-2 text-xs">2</span>
+                    <div>
+                      <p className="font-medium">Order Confirmation</p>
+                      <p className="text-black">Once approved, your reservation will move to the orders section.</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center mr-2 text-xs">3</span>
+                    <div>
+                      <p className="font-medium">Production & Delivery</p>
+                      <p className="text-black">Your product will be prepared and delivered to your specified address.</p>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={() => setShowSuccessModal(false)}
+                  className="flex-1 bg-[#8B1C1C] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#6d1515] transition-colors"
+                >
+                  View My Reservations
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    window.location.href = '/home';
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                >
+                  Continue Shopping
+                </button>
               </div>
             </div>
           </div>

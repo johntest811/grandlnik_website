@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     const reservationRows = items.map((it) => ({
       user_id: userId,
       product_id: it.product_id,
-      item_type: "order",            // or "reservation" if you prefer
+      item_type: "reserve",            // Changed from "order" to "reserve"
       status: "pending_payment",
       order_status: "pending_payment",
       order_progress: "awaiting_payment",
@@ -157,12 +157,19 @@ export async function POST(req: NextRequest) {
         currency: "PHP",
         user_item_id: userItemIds[0],               // primary
         product_name: "Cart Checkout",
-        success_url: `${baseUrl}/profile/order`,
+        success_url: `${baseUrl}/profile/reserve?payment=success&item_ids=${userItemIds.join(",")}`,
         cancel_url: `${baseUrl}/profile/cart`,
-        payment_type: "order",
+        payment_type: "reserve",                     // Changed from "order" to "reserve"
         payment_method: "paymongo",
+        voucher_code: voucherCode || null,           // Pass voucher code for discount display
         // Attach all item ids; webhooks must handle array/CSV
-        metadata: { user_item_ids: userItemIds.join(",") }
+        metadata: { 
+          user_item_ids: userItemIds.join(","),
+          subtotal,
+          addons_total: 0,
+          discount_value: discount,
+          voucher_code: voucherCode || null
+        }
       })
     });
 
