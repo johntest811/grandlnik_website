@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
 
@@ -59,6 +60,7 @@ const supabase = createClient(
 );
 
 export default function ProfileReservePage() {
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<UserItem[]>([]);
   const [productsById, setProductsById] = useState<Record<string, Product>>({});
@@ -82,6 +84,16 @@ export default function ProfileReservePage() {
         }
 
         setUserId(currentUserId);
+
+        // If redirected from a successful checkout, clear any remaining cart rows
+        try {
+          const shouldClear = searchParams?.get("clearCart") === "1";
+          if (shouldClear) {
+            await fetch(`/api/cart?clear=true&userId=${currentUserId}`, { method: "DELETE", cache: "no-store" });
+          }
+        } catch (e) {
+          console.warn("Could not clear cart after success:", e);
+        }
 
         // Fetch user's reservations
         const { data: userItems, error: itemsError } = await supabase
@@ -143,7 +155,7 @@ export default function ProfileReservePage() {
     };
 
     load();
-  }, []);
+  }, [searchParams]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

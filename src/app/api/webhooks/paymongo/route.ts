@@ -6,8 +6,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_ORIGIN || "https://adminside-grandlink.vercel.app";
-
 export async function POST(request: NextRequest) {
   try {
     console.log('📦 PayMongo webhook received');
@@ -91,18 +89,42 @@ export async function POST(request: NextRequest) {
       }
 
       if (notifiedItems.length) {
-        try {
-          await fetch(`${ADMIN_URL}/api/notify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'order_placed',
-              items: notifiedItems,
-              total: amountPaid,
-            }),
-          });
-        } catch (notifyErr) {
-          console.warn('Admin notify failed:', notifyErr);
+        const paymentLabel = paymentType === 'reservation' ? 'Reservation payment' : 'Order payment';
+        const notificationTitle = paymentType === 'reservation' ? 'Reservation Paid' : 'Order Paid';
+        const adminMessage = `${paymentLabel} received via PayMongo. Items: ${notifiedItems.length}. Amount: ₱${Number(amountPaid || 0).toLocaleString()}`;
+
+        console.log('📢 Inserting admin notification:', {
+          title: notificationTitle,
+          message: adminMessage,
+          type: 'order',
+          priority: 'high',
+          recipient_role: 'admin',
+        });
+
+        const { data: insertedNotif, error: adminNotifErr } = await supabase.from('notifications').insert({
+          title: notificationTitle,
+          message: adminMessage,
+          type: 'order',
+          priority: 'high',
+          recipient_role: 'admin',
+          is_read: false,
+          created_at: new Date().toISOString(),
+          metadata: {
+            payment_provider: 'paymongo',
+            payment_type: paymentType,
+            amount_paid: amountPaid,
+            subtotal,
+            addons_total: addonsTotal,
+            discount_value: discountValue,
+            reservation_fee: reservationFee,
+            user_item_ids: ids,
+          },
+        }).select();
+
+        if (adminNotifErr) {
+          console.error('❌ Failed to store admin notification:', adminNotifErr.message);
+        } else {
+          console.log('✅ Admin notification inserted successfully:', insertedNotif);
         }
       }
 

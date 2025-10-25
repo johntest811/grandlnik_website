@@ -13,8 +13,6 @@ const PAYPAL_BASE_URL = PAYPAL_ENVIRONMENT === 'sandbox'
   ? 'https://api-m.sandbox.paypal.com' 
   : 'https://api-m.paypal.com';
 
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_ORIGIN || 'https://adminside-grandlink.vercel.app';
-
 async function getPayPalAccessToken() {
   const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString('base64');
   
@@ -139,18 +137,38 @@ export async function POST(request: NextRequest) {
       }
 
       if (notifiedItems.length) {
-        try {
-          await fetch(`${ADMIN_URL}/api/notify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'order_placed',
-              items: notifiedItems,
-              total: grandTotal,
-            }),
-          });
-        } catch (notifyErr) {
-          console.warn('Admin notify failed:', notifyErr);
+        const paymentLabel = notifiedItems.length > 1 ? 'Reservation payments' : 'Reservation payment';
+        const notificationTitle = notifiedItems.length > 1 ? 'Reservations Paid' : 'Reservation Paid';
+        const adminMessage = `${paymentLabel} received via PayPal. Items: ${notifiedItems.length}. Amount: ₱${Number(grandTotal || 0).toLocaleString()}`;
+
+        console.log('📢 Inserting admin notification:', {
+          title: notificationTitle,
+          message: adminMessage,
+          type: 'order',
+          priority: 'high',
+          recipient_role: 'admin',
+        });
+
+        const { data: insertedNotif, error: adminNotifErr } = await supabase.from('notifications').insert({
+          title: notificationTitle,
+          message: adminMessage,
+          type: 'order',
+          priority: 'high',
+          recipient_role: 'admin',
+          is_read: false,
+          created_at: new Date().toISOString(),
+          metadata: {
+            payment_provider: 'paypal',
+            payment_type: 'reservation',
+            amount_paid: grandTotal,
+            user_item_ids: ids,
+          },
+        }).select();
+
+        if (adminNotifErr) {
+          console.error('❌ Failed to store admin notification:', adminNotifErr.message);
+        } else {
+          console.log('✅ Admin notification inserted successfully:', insertedNotif);
         }
       }
 

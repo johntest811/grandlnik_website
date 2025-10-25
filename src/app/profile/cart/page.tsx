@@ -154,7 +154,7 @@ export default function CartPage() {
           user_item_ids: selectedItems.map(item => item.id),
           payment_method: "paymongo",
           payment_type: "reservation",
-          success_url: `${window.location.origin}/profile/order`,
+          success_url: `${window.location.origin}/profile/reserve`,
           cancel_url: `${window.location.origin}/profile/cart`,
           voucher: voucherInfo || undefined
         })
