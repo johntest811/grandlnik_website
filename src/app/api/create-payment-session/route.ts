@@ -194,18 +194,19 @@ export async function POST(request: NextRequest) {
       const unit = Number(p?.price || 0);
       const qty = Number(r.quantity || 1);
       const addons: any[] = Array.isArray(r.meta?.addons) ? r.meta.addons : [];
-      const lineAddons = addons.reduce((s, a) => s + Number(a?.fee || 0), 0) * qty;
+      const perUnitAddon = addons.reduce((s, a) => s + Number(a?.fee || 0), 0);
+      const lineAddons = perUnitAddon * qty;
       const lineSubtotal = unit * qty;
       subtotal += lineSubtotal;
       addonsTotal += lineAddons;
-      return { 
-        id: r.id, 
+      return {
+        id: r.id,
         name: p?.name || 'Product',
-        qty, 
-        unit, 
-        lineSubtotal, 
+        qty,
+        unit,
+        lineSubtotal,
         lineAddons,
-        addons 
+        addons,
       };
     });
 
@@ -219,82 +220,182 @@ export async function POST(request: NextRequest) {
     }
     appliedDiscount = Math.min(appliedDiscount, preDiscount);
     
-    const afterDiscount = Math.max(0, preDiscount - appliedDiscount);
-    const reservationFee = 500;
-    const totalAmount = afterDiscount + reservationFee;
+    const totalLineCents = itemDetails.reduce(
+      (sum, item) => sum + Math.round((item.lineSubtotal + item.lineAddons) * 100),
+      0
+    );
+  const discountCents = Math.round(appliedDiscount * 100);
+    let allocatedDiscountCents = 0;
 
-    // Build PayMongo line items
-    const payMongoLineItems: any[] = [];
-    
-    // Add each product
-    itemDetails.forEach(item => {
-      const productPrice = item.lineSubtotal + item.lineAddons;
-      payMongoLineItems.push({
-        name: item.name,
-        quantity: item.qty,
-        amount: Math.round((productPrice / item.qty) * 100),
-        currency: 'PHP',
-        description: item.addons.length > 0 
-          ? `Includes: ${item.addons.map((a: any) => a.label).join(', ')}`
-          : 'Product'
-      });
+    const discountedItems = itemDetails.map((item, index) => {
+      const lineCents = Math.round((item.lineSubtotal + item.lineAddons) * 100);
+      let itemDiscountCents = 0;
+
+      if (discountCents > 0 && totalLineCents > 0) {
+        if (index === itemDetails.length - 1) {
+          itemDiscountCents = Math.min(lineCents, discountCents - allocatedDiscountCents);
+        } else {
+          itemDiscountCents = Math.floor((lineCents * discountCents) / totalLineCents);
+          const remainingBudget = discountCents - allocatedDiscountCents;
+          if (itemDiscountCents > remainingBudget) {
+            itemDiscountCents = remainingBudget;
+          }
+          if (itemDiscountCents > lineCents) {
+            itemDiscountCents = lineCents;
+          }
+        }
+      }
+
+      itemDiscountCents = Math.max(0, itemDiscountCents);
+      allocatedDiscountCents += itemDiscountCents;
+
+      const netLineCents = Math.max(0, lineCents - itemDiscountCents);
+      const netLine = netLineCents / 100;
+
+      return {
+        ...item,
+        lineCents,
+        itemDiscountCents,
+        netLineCents,
+        netLine,
+      };
     });
 
-    // Add discount as negative line item if applicable
-    if (appliedDiscount > 0) {
+    // Adjust for any rounding remainder
+    const remainingDiscount = discountCents - allocatedDiscountCents;
+    if (remainingDiscount > 0 && discountedItems.length > 0) {
+      const lastItem = discountedItems[discountedItems.length - 1];
+      const extra = Math.min(remainingDiscount, lastItem.netLineCents);
+      lastItem.itemDiscountCents += extra;
+      lastItem.netLineCents = Math.max(0, lastItem.netLineCents - extra);
+      lastItem.netLine = lastItem.netLineCents / 100;
+    }
+
+    const discountedSubtotal = discountedItems.reduce(
+      (sum, item) => sum + item.netLine,
+      0
+    );
+    const reservationFee = 500;
+    const afterDiscount = Number(discountedSubtotal.toFixed(2));
+    const totalAmount = afterDiscount + reservationFee;
+    const effectiveDiscount = Number((preDiscount - afterDiscount).toFixed(2));
+
+    const payMongoLineItems: any[] = [];
+    discountedItems.forEach((item) => {
+      const baseDesc: string[] = [];
+      if (item.lineSubtotal > 0) {
+        baseDesc.push(`Products: ₱${item.lineSubtotal.toFixed(2)}`);
+      }
+      if (item.lineAddons > 0) {
+        baseDesc.push(`Add-ons: ₱${item.lineAddons.toFixed(2)}`);
+      }
+      const itemDiscount = Number((item.itemDiscountCents / 100).toFixed(2));
+      if (itemDiscount > 0) {
+        baseDesc.push(`Discount applied: -₱${itemDiscount.toFixed(2)}`);
+      }
+
+      if (!item.qty || item.qty <= 0) {
+        const batchTotal = (item.netLineCents / 100).toFixed(2);
+        const details = [...baseDesc, `Batch qty: 1`, `Discounted unit price: ₱${batchTotal}`, `Batch total: ₱${batchTotal}`];
+        payMongoLineItems.push({
+          name: `${item.name} x1${itemDiscount > 0 ? ' (discounted)' : ''}`,
+          quantity: 1,
+          amount: item.netLineCents,
+          currency: 'PHP',
+          description: details.join(' | '),
+        });
+        return;
+      }
+
+      const perUnitBaseCents = Math.floor(item.netLineCents / item.qty);
+      const remainderUnits = item.netLineCents % item.qty;
+
+      const pushBatch = (batchQty: number, unitCents: number) => {
+        if (batchQty <= 0) return;
+        const unitPrice = (unitCents / 100).toFixed(2);
+        const batchTotal = ((unitCents * batchQty) / 100).toFixed(2);
+        const details = [
+          `Original qty: ${item.qty}`,
+          ...baseDesc,
+          `Batch qty: ${batchQty}`,
+          `Discounted unit price: ₱${unitPrice}`,
+          `Batch total: ₱${batchTotal}`,
+        ];
+        const labelQty = batchQty === item.qty ? `${batchQty}` : `${batchQty}/${item.qty}`;
+        payMongoLineItems.push({
+          name: `${item.name} x${labelQty}${itemDiscount > 0 ? ' (discounted)' : ''}`,
+          quantity: batchQty,
+          amount: unitCents,
+          currency: 'PHP',
+          description: details.join(' | '),
+        });
+      };
+
+      const baseQty = item.qty - remainderUnits;
+      if (baseQty > 0) {
+        pushBatch(baseQty, perUnitBaseCents);
+      }
+      if (remainderUnits > 0) {
+        pushBatch(remainderUnits, perUnitBaseCents + 1);
+      }
+    });
+
+    if (effectiveDiscount > 0) {
       payMongoLineItems.push({
         name: `Discount (${voucher?.code || 'Applied'})`,
         quantity: 1,
-        amount: -Math.round(appliedDiscount * 100),
+        amount: 0,
         currency: 'PHP',
-        description: voucher?.type === 'percent' 
-          ? `${voucher.value}% off` 
-          : `₱${appliedDiscount.toLocaleString()} off`
+        description: `Total discount applied: -₱${effectiveDiscount.toFixed(2)}`,
       });
     }
 
-    // Add reservation fee
     payMongoLineItems.push({
       name: 'Reservation Fee',
       quantity: 1,
       amount: Math.round(reservationFee * 100),
       currency: 'PHP',
-      description: 'One-time reservation fee'
+      description: 'One-time reservation fee',
     });
 
-    // Build PayPal items
-    const payPalItems: any[] = [];
-    itemDetails.forEach(item => {
-      const productPrice = item.lineSubtotal + item.lineAddons;
-      const usdPrice = Number((productPrice / item.qty / 50).toFixed(2));
+    const payPalItems = discountedItems.map((item) => ({
+      name: `${item.name} x${item.qty}`,
+      quantity: '1',
+      unit_amount: Number((item.netLine / 50).toFixed(2)).toFixed(2),
+    }));
+
+    if (effectiveDiscount > 0) {
       payPalItems.push({
-        name: item.name,
-        quantity: item.qty,
-        unit_amount: usdPrice.toFixed(2)
+        name: `Discount (${voucher?.code || 'Applied'})`,
+        quantity: '1',
+        unit_amount: '0.00',
       });
-    });
+    }
 
-    // Add reservation fee to PayPal
     payPalItems.push({
       name: 'Reservation Fee',
-      quantity: 1,
-      unit_amount: Number((reservationFee / 50).toFixed(2)).toFixed(2)
+      quantity: '1',
+      unit_amount: Number((reservationFee / 50).toFixed(2)).toFixed(2),
     });
+
+  const discountedMap = new Map(discountedItems.map((item) => [item.id, item]));
 
     // Update meta for all items
     for (const r of rows) {
-      const item = itemDetails.find(i => i.id === r.id)!;
+      const item = discountedMap.get(r.id)!;
       await supabase
         .from('user_items')
         .update({
           meta: {
             ...(r.meta || {}),
             voucher_code: voucher?.code || null,
-            discount_value: appliedDiscount,
+            discount_value: effectiveDiscount,
             subtotal,
             addons_total: addonsTotal,
             total_amount: totalAmount,
             reservation_fee: reservationFee,
+            line_discount: item ? Number((item.itemDiscountCents / 100).toFixed(2)) : 0,
+            line_total_after_discount: item ? Number(item.netLine.toFixed(2)) : undefined,
           },
           updated_at: new Date().toISOString()
         })
@@ -306,7 +407,7 @@ export async function POST(request: NextRequest) {
       subtotal,
       addons_total: addonsTotal,
       discount_code: voucher?.code || null,
-      discount_value: appliedDiscount,
+  discount_value: effectiveDiscount,
       payment_type,
       reservation_fee: reservationFee,
       total_amount: totalAmount,
