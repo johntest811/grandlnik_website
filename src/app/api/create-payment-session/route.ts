@@ -49,7 +49,7 @@ async function createPayMongoSession(sessionData: any) {
         show_description: true,
         show_line_items: true,
         line_items: lineItems,
-        payment_method_types: ['gcash', 'paymaya', 'card'],
+        payment_method_types: ['gcash', 'paymaya'],
         success_url,
         cancel_url,
         description: `Payment for ${lineItems.length} item(s)`,
@@ -249,29 +249,37 @@ export async function POST(request: NextRequest) {
     const displayLineItems: any[] = [];
     let computedProductTotalCents = 0;
 
+    // Separate product total (without addons) and addon items
     itemDetails.forEach((item, idx) => {
       const grossCents = lineTotalsCents[idx] || 0;
       const itemDiscountCents = discountAllocations[idx] || 0;
-      const netLineCents = Math.max(0, grossCents - itemDiscountCents);
-      const unitNetCents = item.qty > 0 ? Math.round(netLineCents / item.qty) : 0;
+      
+      // Calculate product price WITHOUT addons
+      const productOnlyLineSubtotal = item.lineSubtotal; // This is product price * qty
+      const productOnlyCents = Math.round(productOnlyLineSubtotal * 100);
+      
+      // Allocate discount proportionally to product only
+      const productDiscountCents = item.lineAddons === 0 
+        ? itemDiscountCents 
+        : Math.round((itemDiscountCents * productOnlyCents) / grossCents);
+      
+      const netProductCents = Math.max(0, productOnlyCents - productDiscountCents);
+      const unitNetCents = item.qty > 0 ? Math.round(netProductCents / item.qty) : 0;
       computedProductTotalCents += unitNetCents * item.qty;
 
-      const originalUnitPrice = item.qty > 0 ? (grossCents / item.qty) / 100 : 0;
+      const originalUnitPrice = item.qty > 0 ? (productOnlyCents / item.qty) / 100 : 0;
       const netUnitPrice = unitNetCents / 100;
-      const discountValue = itemDiscountCents / 100;
+      const discountValue = productDiscountCents / 100;
 
       const descriptionParts: string[] = [];
       descriptionParts.push(`Qty: ${item.qty}`);
       descriptionParts.push(`Unit after discount: ₱${netUnitPrice.toFixed(2)}`);
-      if (item.addons.length) {
-        descriptionParts.push(`Add-ons: ${item.addons.map((a: any) => a.label || a.key).join(', ')}`);
-      }
-      if (itemDiscountCents > 0) {
+      if (productDiscountCents > 0) {
         descriptionParts.push(`Discount applied: ₱${discountValue.toFixed(2)}`);
       }
 
       const baseLabel = `${item.name} @ ₱${netUnitPrice.toFixed(2)}`;
-      const nameWithContext = itemDiscountCents > 0
+      const nameWithContext = productDiscountCents > 0
         ? `${baseLabel} (Discounted)`
         : baseLabel;
 
@@ -290,8 +298,32 @@ export async function POST(request: NextRequest) {
         original_unit_price: Number(originalUnitPrice.toFixed(2)),
         unit_price: Number(netUnitPrice.toFixed(2)),
         discount_value: Number(discountValue.toFixed(2)),
-        line_total: Number((netLineCents / 100).toFixed(2))
+        line_total: Number((netProductCents / 100).toFixed(2))
       });
+
+      // Add color customization as separate line item if exists
+      const colorAddon = item.addons.find((a: any) => a.key === 'color_customization');
+      if (colorAddon) {
+        const colorAddonPrice = 2500; // Fixed price for color customization
+        const colorAddonCents = colorAddonPrice * 100;
+        computedProductTotalCents += colorAddonCents;
+
+        payMongoLineItems.push({
+          name: 'Color Addon',
+          quantity: 1,
+          amount: colorAddonCents,
+          currency: 'PHP',
+          description: `Color customization: ${colorAddon.value || 'Custom color'}`
+        });
+
+        displayLineItems.push({
+          type: 'addon',
+          name: 'Color Addon',
+          quantity: 1,
+          unit_price: colorAddonPrice,
+          line_total: colorAddonPrice
+        });
+      }
     });
 
     const expectedProductTotalCents = Math.round(afterDiscount * 100);
@@ -353,14 +385,34 @@ export async function POST(request: NextRequest) {
     itemDetails.forEach((item, idx) => {
       const grossCents = lineTotalsCents[idx] || 0;
       const itemDiscountCents = discountAllocations[idx] || 0;
-      const netLineValue = Math.max(0, (grossCents - itemDiscountCents) / 100);
-      const unitNetValue = item.qty > 0 ? netLineValue / item.qty : 0;
+      
+      // Calculate product price WITHOUT addons for PayPal
+      const productOnlyLineSubtotal = item.lineSubtotal;
+      const productOnlyCents = Math.round(productOnlyLineSubtotal * 100);
+      const productDiscountCents = item.lineAddons === 0 
+        ? itemDiscountCents 
+        : Math.round((itemDiscountCents * productOnlyCents) / grossCents);
+      
+      const netProductValue = Math.max(0, (productOnlyCents - productDiscountCents) / 100);
+      const unitNetValue = item.qty > 0 ? netProductValue / item.qty : 0;
       const usdUnit = Number((unitNetValue / 50).toFixed(2));
+      
       payPalItems.push({
-        name: itemDiscountCents > 0 ? `${item.name} (Discounted)` : item.name,
+        name: productDiscountCents > 0 ? `${item.name} (Discounted)` : item.name,
         quantity: item.qty,
         unit_amount: usdUnit.toFixed(2)
       });
+
+      // Add color addon as separate PayPal item if exists
+      const colorAddon = item.addons.find((a: any) => a.key === 'color_customization');
+      if (colorAddon) {
+        const colorAddonUsd = Number((2500 / 50).toFixed(2));
+        payPalItems.push({
+          name: 'Color Addon',
+          quantity: 1,
+          unit_amount: colorAddonUsd.toFixed(2)
+        });
+      }
     });
 
     const reservationFeeUsd = Number((reservationFeeCharged / 50).toFixed(2));

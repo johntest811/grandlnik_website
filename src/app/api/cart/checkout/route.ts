@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     const reservationRows = items.map((it) => ({
       user_id: userId,
       product_id: it.product_id,
-      item_type: "reserve",            // Changed from "order" to "reserve"
+      item_type: "order",            // or "reservation" if you prefer
       status: "pending_payment",
       order_status: "pending_payment",
       order_progress: "awaiting_payment",

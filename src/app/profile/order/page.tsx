@@ -19,6 +19,8 @@ type UserItem = {
   updated_at?: string;
   admin_accepted_at?: string;
   progress_history?: any[];
+  total_paid?: number;
+  payment_method?: string;
 };
 
 type Product = {
@@ -241,7 +243,11 @@ export default function ProfileOrderPage() {
           {filtered.map((item) => {
             const product = productsById[item.product_id];
             const imgUrl = product?.images?.[0] || product?.image1 || "/no-image.png";
-            const totalPrice = (product?.price || 0) * item.quantity;
+            
+            // Use total_paid if available (after payment), otherwise calculate
+            const totalPrice = item.total_paid 
+              ? Number(item.total_paid)
+              : (product?.price || 0) * item.quantity;
 
             return (
               <div key={item.id} className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow">
@@ -257,7 +263,10 @@ export default function ProfileOrderPage() {
                   <div className="flex-1">
                     <h3 className="font-bold text-lg mb-2 text-black">{product?.name}</h3>
                     <p className="text-sm text-black">Quantity: {item.quantity}</p>
-                    <p className="text-lg font-semibold text-black mt-2">Total: ₱{(totalPrice).toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-black mt-2">Total Paid: ₱{(totalPrice).toLocaleString()}</p>
+                    {item.payment_method && (
+                      <p className="text-xs text-black mt-1">via {item.payment_method.toUpperCase()}</p>
+                    )}
 
                     <div className="mt-3 flex gap-2">
                       <button
@@ -331,7 +340,7 @@ export default function ProfileOrderPage() {
                               className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
                                 done
                                   ? "bg-[#8B1C1C] text-white border-[#8B1C1C]"
-                                  : "bg-white text-black border-gray-300"
+                                  : "bg-white text-gray-600 border-gray-300"
                               }`}
                             >
                               {done ? "✓" : i + 1}

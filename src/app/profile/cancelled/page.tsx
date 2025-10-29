@@ -15,6 +15,8 @@ type UserItem = {
   meta: any;
   created_at: string;
   updated_at?: string;
+  total_paid?: number;
+  payment_method?: string;
 };
 
 type Product = {

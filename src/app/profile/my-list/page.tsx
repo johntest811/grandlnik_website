@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
 type UserItem = {
@@ -29,6 +30,7 @@ const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 export default function ProfileMyListPage() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<UserItem[]>([]);
   const [productsById, setProductsById] = useState<Record<string, Product>>({});
@@ -121,25 +123,16 @@ export default function ProfileMyListPage() {
 
   const moveToReserve = async (item: UserItem) => {
     if (!userId) return alert("Please log in.");
-    setActionLoading(item.id);
-    try {
-      // update existing wishlist entry to reserve
-      const { error } = await supabase
-        .from("user_items")
-        .update({ item_type: "reserve", status: "reserved", updated_at: new Date().toISOString() })
-        .eq("id", item.id)
-        .eq("user_id", userId);
-      if (error) throw error;
-      setItems((s) => s.filter((i) => i.id !== item.id)); // remove from view (now reserved)
-      alert("Moved to Reserve");
-    } catch (err: any) {
-      // avoid lint/runtime issues by using a typed catch variable and a safe log call
-      // eslint-disable-next-line no-console
-      console.warn("move to reserve error", err);
-      alert("Could not reserve item");
-    } finally {
-      setActionLoading(null);
+    
+    // Get product info
+    const product = productsById[item.product_id];
+    if (!product) {
+      alert("Product not found");
+      return;
     }
+    
+    // Redirect to reservation page with product ID
+    router.push(`/reservation?productId=${item.product_id}`);
   };
 
   return (

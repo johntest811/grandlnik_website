@@ -147,13 +147,16 @@ export default function CartPage() {
     }
     setProcessing(true);
     try {
-      const res = await fetch("/api/cart/checkout", {
+      const res = await fetch("/api/create-payment-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId,
-          itemIds: selectedItems.map(item => item.id),
-          voucherCode: voucherInfo?.code || null
+          user_item_ids: selectedItems.map(item => item.id),
+          payment_method: "paymongo",
+          payment_type: "reservation",
+          success_url: `${window.location.origin}/profile/reserve`,
+          cancel_url: `${window.location.origin}/profile/cart`,
+          voucher: voucherInfo || undefined
         })
       });
       const json = await res.json();
