@@ -157,19 +157,12 @@ export async function POST(req: NextRequest) {
         currency: "PHP",
         user_item_id: userItemIds[0],               // primary
         product_name: "Cart Checkout",
-        success_url: `${baseUrl}/profile/reserve?payment=success&item_ids=${userItemIds.join(",")}`,
+        success_url: `${baseUrl}/profile/order`,
         cancel_url: `${baseUrl}/profile/cart`,
-        payment_type: "reserve",                     // Changed from "order" to "reserve"
+        payment_type: "order",
         payment_method: "paymongo",
-        voucher_code: voucherCode || null,           // Pass voucher code for discount display
         // Attach all item ids; webhooks must handle array/CSV
-        metadata: { 
-          user_item_ids: userItemIds.join(","),
-          subtotal,
-          addons_total: 0,
-          discount_value: discount,
-          voucher_code: voucherCode || null
-        }
+        metadata: { user_item_ids: userItemIds.join(",") }
       })
     });
 
