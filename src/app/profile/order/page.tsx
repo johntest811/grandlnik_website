@@ -20,6 +20,7 @@ type UserItem = {
   admin_accepted_at?: string;
   progress_history?: any[];
   total_paid?: number;
+  total_amount?: number;
   payment_method?: string;
 };
 
@@ -244,8 +245,10 @@ export default function ProfileOrderPage() {
             const product = productsById[item.product_id];
             const imgUrl = product?.images?.[0] || product?.image1 || "/no-image.png";
             
-            // Use total_paid if available (after payment), otherwise calculate
-            const totalPrice = item.total_paid 
+            // Use total_amount if available (includes all fees and discounts), fallback to total_paid, then calculate
+            const totalPrice = item.total_amount 
+              ? Number(item.total_amount)
+              : item.total_paid 
               ? Number(item.total_paid)
               : (product?.price || 0) * item.quantity;
 

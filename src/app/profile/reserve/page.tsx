@@ -22,6 +22,7 @@ type UserItem = {
   admin_notes?: string;
   estimated_delivery_date?: string;
   total_paid?: number;
+  total_amount?: number;
   payment_method?: string;
 };
 
@@ -246,9 +247,13 @@ function ProfileReservePageContent() {
     return product.image1 || product.image2 || "/no-image.png";
   };
 
-  // Helper to safely get unit price or total paid amount
+  // Helper to safely get unit price or total amount
   const getItemTotalPrice = (it: UserItem, prod?: Product) => {
-    // If payment completed, show total_paid amount
+    // If payment completed, show total_amount (includes product, addons, reservation fee, minus discounts)
+    if (it.payment_status === 'completed' && it.total_amount) {
+      return Number(it.total_amount);
+    }
+    // Fallback to total_paid if total_amount not available
     if (it.payment_status === 'completed' && it.total_paid) {
       return Number(it.total_paid);
     }

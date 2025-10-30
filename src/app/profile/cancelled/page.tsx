@@ -16,6 +16,7 @@ type UserItem = {
   created_at: string;
   updated_at?: string;
   total_paid?: number;
+  total_amount?: number;
   payment_method?: string;
 };
 
@@ -293,7 +294,7 @@ Thank you.`;
               const statusDisplay = getStatusDisplay(it.status);
               const refundStatus = getRefundStatus(it);
               const reservationFee = it.meta?.reservation_fee || 500;
-              const totalPrice = (p?.price || it.meta?.product_price || 0) * it.quantity;
+              const totalPrice = it.total_amount || it.total_paid || ((p?.price || it.meta?.product_price || 0) * it.quantity);
               // Define refundAmount for card section (was causing ReferenceError)
               const refundAmount = Number(it.meta?.refund_amount ?? reservationFee);
 
@@ -475,7 +476,7 @@ Thank you.`;
             {(() => {
               const item = receiptItem!;
               const product = productsById[item.product_id];
-              const totalPrice = (product?.price || item.meta?.product_price || 0) * item.quantity;
+              const totalPrice = item.total_amount || item.total_paid || ((product?.price || item.meta?.product_price || 0) * item.quantity);
               const reservationFee = item.meta?.reservation_fee || 500;
               const refundAmount = item.meta?.refund_amount || reservationFee;
 

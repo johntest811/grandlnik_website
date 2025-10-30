@@ -15,6 +15,7 @@ type Item = {
   order_progress?: string;
   meta: any;
   total_paid?: number;
+  total_amount?: number;
   payment_method?: string;
 };
 
@@ -251,17 +252,29 @@ export default function ProfileCompletedPage() {
                       <span>{selectedReceipt.item.quantity}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Subtotal</span>
-                      <span>{currency((product?.price || 0) * selectedReceipt.item.quantity)}</span>
+                      <span>Unit Price</span>
+                      <span>{currency(product?.price || 0)}</span>
                     </div>
+                    {selectedReceipt.item.meta?.addons_total > 0 && (
+                      <div className="flex justify-between">
+                        <span>Add-ons Total</span>
+                        <span>{currency(selectedReceipt.item.meta.addons_total)}</span>
+                      </div>
+                    )}
+                    {selectedReceipt.item.meta?.discount_value > 0 && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Discount</span>
+                        <span>-{currency(selectedReceipt.item.meta.discount_value)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span>Reservation Fee</span>
-                      <span>- {currency(500)}</span>
+                      <span>{currency(selectedReceipt.item.meta?.reservation_fee || 500)}</span>
                     </div>
                     <div className="flex justify-between font-semibold text-lg border-t border-black pt-2">
-                      <span>Balance Due</span>
+                      <span>Total Paid</span>
                       <span className="text-black">
-                        {currency((product?.price || 0) * selectedReceipt.item.quantity - 500)}
+                        {currency(selectedReceipt.item.total_amount || selectedReceipt.item.total_paid || (product?.price || 0) * selectedReceipt.item.quantity)}
                       </span>
                     </div>
                   </div>

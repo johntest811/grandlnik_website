@@ -326,38 +326,28 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const expectedProductTotalCents = Math.round(afterDiscount * 100);
+    // Reservation Fee is ALWAYS ₱500 (fixed, no adjustments)
     const reservationFeeBase = 500;
-    const reservationFeeCents = Math.round(reservationFeeBase * 100);
+    const reservationFeeCents = 50000; // ₱500.00 in centavos
 
     const reservationLineItem = {
       name: 'Reservation Fee',
       quantity: 1,
       amount: reservationFeeCents,
       currency: 'PHP',
-      description: 'One-time reservation fee'
+      description: 'One-time reservation fee (non-discountable)'
     };
     payMongoLineItems.push(reservationLineItem);
     displayLineItems.push({
       type: 'reservation_fee',
       name: 'Reservation Fee',
       quantity: 1,
-      unit_price: Number((reservationFeeCents / 100).toFixed(2)),
-      line_total: Number((reservationFeeCents / 100).toFixed(2))
+      unit_price: 500,
+      line_total: 500
     });
 
-    const expectedTotalCents = expectedProductTotalCents + reservationFeeCents;
-    let currentTotalCents = computedProductTotalCents + reservationFeeCents;
-    let totalDiffCents = expectedTotalCents - currentTotalCents;
-
-    if (totalDiffCents !== 0) {
-      const adjustedFeeCents = Math.max(0, reservationFeeCents + totalDiffCents);
-      reservationLineItem.amount = adjustedFeeCents;
-      const feeDisplay = displayLineItems[displayLineItems.length - 1];
-      feeDisplay.unit_price = Number((adjustedFeeCents / 100).toFixed(2));
-      feeDisplay.line_total = Number((adjustedFeeCents / 100).toFixed(2));
-      currentTotalCents = computedProductTotalCents + adjustedFeeCents;
-    }
+    // Final total = products + color addons + reservation fee
+    const finalTotalCents = computedProductTotalCents + reservationFeeCents;
 
     if (appliedDiscountCents > 0) {
       const discountLabel = voucher?.code ? `Discount (${voucher.code})` : 'Discount';

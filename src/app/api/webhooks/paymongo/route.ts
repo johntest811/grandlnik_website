@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       const discountValue = Number(meta?.discount_value || 0);
       const paymentType = meta?.payment_type || 'order';
       const reservationFee = Number(meta?.reservation_fee || (paymentType === 'reservation' ? 500 : 0));
+      const totalAmount = Number(meta?.total_amount || amountPaid);
 
       if (ids.length === 0) {
         console.error('❌ No user_item_id(s) in webhook data');
@@ -67,11 +68,13 @@ export async function POST(request: NextRequest) {
             payment_status: 'completed',
             payment_id: sessionId,
             total_paid: amountPaid,
+            total_amount: totalAmount,
             payment_method: 'paymongo',
             meta: {
               ...userItem.meta,
               payment_confirmed_at: new Date().toISOString(),
               amount_paid: amountPaid,
+              total_amount: totalAmount,
               payment_session_id: sessionId,
               payment_method: 'paymongo',
               subtotal,

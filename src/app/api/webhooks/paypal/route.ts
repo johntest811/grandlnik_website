@@ -99,9 +99,10 @@ export async function POST(request: NextRequest) {
         const subtotal = unit * qty;
         const addonsTotal = addonsLine;
         const discountValue = Number(userItem.meta?.voucher_discount || 0);
-        const totalAmount = Math.max(0, subtotal + addonsTotal - discountValue);
+        const reservationFee = 500; // reservation flow charges ₱500 upfront
+        const productTotal = Math.max(0, subtotal + addonsTotal - discountValue);
+        const totalAmount = productTotal + reservationFee; // include reservation fee in total
         grandTotal += totalAmount;
-        const reservationFee = 500; // reservation flow charges 500 upfront
         const stockBefore = Number(product?.inventory ?? 0);
         const newInventory = Math.max(0, stockBefore - qty);
 
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest) {
             payment_status: 'completed',
             payment_id: orderId,
             total_paid: totalAmount,
+            total_amount: totalAmount,
             payment_method: 'paypal',
             meta: {
               ...userItem.meta,
