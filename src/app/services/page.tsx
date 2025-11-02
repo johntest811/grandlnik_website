@@ -1,6 +1,6 @@
 "use client";
 
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
@@ -36,7 +36,7 @@ export default function ServicesPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
       <main className="flex-1">
         {/* Hero */}
         <div className="relative w-full">

@@ -1,7 +1,7 @@
 "use client";
 //import { createClient } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 import { supabase } from "../Clients/Supabase/SupabaseClients";
 
@@ -58,7 +58,7 @@ export default function ShowroomPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
       <main className="flex-1">
         <div className="max-w-7xl mx-auto px-6 py-12">
           <h2 className="text-center text-3xl font-extrabold leading-tight">

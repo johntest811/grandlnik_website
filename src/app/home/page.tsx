@@ -5,7 +5,7 @@ import Image from "next/image";
 import useEmblaCarousel from "embla-carousel-react";
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 
 type HomeContent = {
@@ -142,7 +142,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
       <main className="flex flex-col items-center justify-center flex-1 w-full">
         {/* Hero Section */}
         <HeroSlider slides={carousel} />

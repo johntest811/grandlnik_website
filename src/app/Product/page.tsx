@@ -4,7 +4,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -107,7 +107,7 @@ function ProductsPageContent() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
       <main className="flex-1 bg-white">
         {/* Search bar */}
         <div className="py-6">

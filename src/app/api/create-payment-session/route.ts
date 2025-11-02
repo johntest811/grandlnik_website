@@ -207,11 +207,17 @@ export async function POST(request: NextRequest) {
 
     const { data: rows, error: itemsErr } = await supabase
       .from('user_items')
-      .select('id, quantity, meta, product_id')
+      .select('id, quantity, meta, product_id, item_type')
       .in('id', ids);
 
     if (itemsErr || !rows || rows.length === 0) {
       return NextResponse.json({ error: 'Items not found' }, { status: 404 });
+    }
+
+    // Validate that all items are either cart or reservation items
+    const validTypes = rows.every(r => r.item_type === 'cart' || r.item_type === 'reservation');
+    if (!validTypes) {
+      return NextResponse.json({ error: 'Invalid item types for payment' }, { status: 400 });
     }
 
     const productIds = Array.from(new Set(rows.map((r) => r.product_id)));
@@ -400,7 +406,7 @@ export async function POST(request: NextRequest) {
       });
     });
 
-    // Update meta for all items and prepare them for reservation
+    // Update meta for all items (they stay as cart items until payment succeeds)
     for (const r of rows) {
       const item = itemDetails.find(i => i.id === r.id)!;
       const metaInfo = itemMetaMap.get(item.id) || {
@@ -414,13 +420,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('user_items')
         .update({
-          item_type: 'reservation',
-          status: 'pending_payment',
-          order_status: 'pending_payment',
-          order_progress: 'awaiting_payment',
           price: Number(product?.price || 0),
-          total_amount: metaInfo.lineTotalAfterDiscount,
-          reservation_fee: reservationFeeCharged,
           meta: {
             ...(r.meta || {}),
             product_name: product?.name || 'Product',

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "../Clients/Supabase/SupabaseClients";
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 
 interface FAQCategory {
@@ -47,7 +47,7 @@ export default function FAQsPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
 
       <main className="flex-1">
         {/* Hero Section */}

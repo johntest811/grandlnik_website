@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "../Clients/Supabase/SupabaseClients";
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 import Image from "next/image";
 
@@ -20,7 +20,7 @@ export default function AboutUsPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
       <main className="flex-1 bg-white">
         {/* Hero Section */}
         <section className="relative w-full h-[320px] md:h-[400px] flex flex-col justify-center items-center bg-[#232d3b]">

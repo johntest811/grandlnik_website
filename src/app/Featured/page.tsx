@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../Clients/Supabase/SupabaseClients";
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 
 interface Project {
@@ -117,7 +117,7 @@ function FeaturedProjectsContent() {
 export default function FeaturedProjectsPage() {
   return (
     <div className="flex flex-col min-h-screen bg-[#232d3b]">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
       <main className="flex-1">
         <FeaturedProjectsContent />
       </main>

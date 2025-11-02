@@ -17,8 +17,7 @@ export async function GET(request: NextRequest) {
       .from('user_items')
       .select('*')
       .eq('user_id', userId)
-      .eq('item_type', 'order')
-      .eq('order_status', 'cart')
+      .eq('item_type', 'cart')
       .order('created_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -30,7 +29,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, productId, quantity = 1, meta = {} } = await request.json();
+    const { userId, productId, quantity = 1, meta = {}, delivery_address_id = null, branch = null } = await request.json();
     if (!userId || !productId) {
       return NextResponse.json({ error: 'Missing userId or productId' }, { status: 400 });
     }
@@ -49,10 +48,9 @@ export async function POST(request: NextRequest) {
 
     const { data: existing } = await supabase
       .from('user_items')
-      .select('id, quantity, meta')
+      .select('id, quantity, meta, delivery_address_id')
       .eq('user_id', userId)
-      .eq('item_type', 'order')
-      .eq('order_status', 'cart')
+      .eq('item_type', 'cart')
       .eq('product_id', productId)
       .maybeSingle();
 
@@ -62,8 +60,9 @@ export async function POST(request: NextRequest) {
         .from('user_items')
         .update({
           quantity: nextQty,
-          meta: { ...(existing.meta || {}), ...(meta || {}) },
+          meta: { ...(existing.meta || {}), ...(meta || {}), branch: branch || existing.meta?.branch },
           price: productPrice,
+          delivery_address_id: delivery_address_id || (existing as any).delivery_address_id,
           updated_at: new Date().toISOString()
         })
         .eq('id', existing.id)
@@ -79,12 +78,12 @@ export async function POST(request: NextRequest) {
       .insert([{
         user_id: userId,
         product_id: productId,
-        item_type: 'order',
-        order_status: 'cart',
+        item_type: 'cart',
         status: 'active',
         quantity: Math.max(1, Number(quantity || 1)),
-        meta,
+        meta: { ...(meta || {}), branch },
         price: productPrice,
+        delivery_address_id,
         created_at: new Date().toISOString()
       }])
       .select()
@@ -110,8 +109,7 @@ export async function PATCH(request: NextRequest) {
       .from('user_items')
       .update(payload)
       .eq('id', id)
-      .eq('item_type', 'order')
-      .eq('order_status', 'cart')
+      .eq('item_type', 'cart')
       .select()
       .single();
 
@@ -134,8 +132,7 @@ export async function DELETE(request: NextRequest) {
         .from('user_items')
         .delete()
         .eq('user_id', userId)
-        .eq('item_type', 'order')
-        .eq('order_status', 'cart');
+        .eq('item_type', 'cart');
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true, cleared: true });
     }
@@ -146,8 +143,7 @@ export async function DELETE(request: NextRequest) {
       .from('user_items')
       .delete()
       .eq('id', id)
-      .eq('item_type', 'order')
-      .eq('order_status', 'cart');
+      .eq('item_type', 'cart');
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ success: true });

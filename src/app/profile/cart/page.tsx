@@ -25,6 +25,14 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+type Address = {
+  id: string;
+  full_name?: string;
+  phone?: string;
+  address?: string;
+  is_default: boolean;
+};
+
 export default function CartPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [items, setItems] = useState<UserItem[]>([]);
@@ -36,12 +44,43 @@ export default function CartPage() {
   const [voucherInfo, setVoucherInfo] = useState<{ code: string; type: 'percent'|'amount'; value: number } | null>(null);
   const [applying, setApplying] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'paymongo' | 'paypal'>('paymongo');
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [selectedBranch, setSelectedBranch] = useState<string>("");
+
+  const branches = [
+    "BALINTAWAK BRANCH",
+    "STA. ROSA BRANCH",
+    "UGONG BRANCH",
+    "ALABANG SHOWROOM",
+    "IMUS BRANCH",
+    "PAMPANGA SHOWROOM",
+    "HIHOME BRANCH",
+    "MC HOME DEPO ORTIGAS",
+    "SAN JUAN CITY",
+    "CW COMMONWEALTH",
+    "MC HOME DEPO BGC",
+  ];
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       const uid = data?.user?.id || null;
       setUserId(uid);
       if (!uid) return setLoading(false);
+      
+      // Load addresses
+      const { data: addressData } = await supabase
+        .from("addresses")
+        .select("*")
+        .eq("user_id", uid)
+        .order("is_default", { ascending: false });
+
+      if (addressData) {
+        setAddresses(addressData as any);
+        const def = addressData.find((a: any) => a.is_default);
+        if (def) setSelectedAddressId(def.id);
+      }
+      
       loadCart(uid);
     });
   }, []);
@@ -146,8 +185,29 @@ export default function CartPage() {
       alert("Select at least one item.");
       return;
     }
+    if (!selectedAddressId) {
+      alert("Please select a delivery address.");
+      return;
+    }
+    if (!selectedBranch) {
+      alert("Please select a pickup branch.");
+      return;
+    }
     setProcessing(true);
     try {
+      // Update cart items with address and branch before checkout
+      for (const item of selectedItems) {
+        await fetch("/api/cart", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: item.id,
+            meta: { ...(item.meta || {}), branch: selectedBranch },
+            delivery_address_id: selectedAddressId
+          })
+        });
+      }
+
       const res = await fetch("/api/create-payment-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -235,6 +295,9 @@ export default function CartPage() {
           const addonsArr: any[] = Array.isArray(item.meta?.addons) ? item.meta.addons : [];
           const hasColorAddon = addonsArr.some((a: any) => a?.key === 'color_customization');
           const colorValue = (addonsArr.find((a: any) => a?.key === 'color_customization')?.value) || '';
+          const addonsFee = addonsArr.reduce((sum: number, addon: any) => sum + Number(addon?.fee || 0), 0);
+          const unitWithAddons = unitPrice + addonsFee;
+          const lineTotal = unitWithAddons * qty;
 
           const updateItemMeta = async (nextAddons: any[]) => {
             await fetch("/api/cart", {
@@ -281,7 +344,8 @@ export default function CartPage() {
                   <div className="flex justify-between">
                     <div>
                       <div className="text-black font-semibold">{product?.name || 'Product'}</div>
-                      <div className="text-black text-sm">₱{unitPrice.toLocaleString()} each</div>
+                      <div className="text-black text-sm">₱{unitPrice.toLocaleString()} each{addonsFee > 0 && ` + ₱${addonsFee.toLocaleString()} addons = ₱${unitWithAddons.toLocaleString()}/unit`}</div>
+                      <div className="text-black text-base font-semibold mt-1">Line Total: ₱{lineTotal.toLocaleString()}</div>
                     </div>
                     <button onClick={() => removeItem(item.id)} className="text-red-600 text-sm hover:underline">Remove</button>
                   </div>
@@ -333,6 +397,44 @@ export default function CartPage() {
           <div className="p-8 text-center text-black border rounded bg-white">Your cart is empty.</div>
         )}
       </div>
+
+      {items.length > 0 && (
+        <div className="bg-white border rounded p-4 max-w-md ml-auto space-y-4 mb-4">
+          <div className="text-black font-semibold text-lg">Delivery Information</div>
+          
+          <div>
+            <label className="block text-sm font-medium text-black mb-2">Delivery Address</label>
+            <select
+              value={selectedAddressId}
+              onChange={(e) => setSelectedAddressId(e.target.value)}
+              className="w-full border rounded px-3 py-2 text-black"
+            >
+              <option value="">Select Address</option>
+              {addresses.map((addr) => (
+                <option key={addr.id} value={addr.id}>
+                  {addr.full_name} - {addr.address} {addr.is_default && "(Default)"}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-black mb-2">Pickup Branch</label>
+            <select
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="w-full border rounded px-3 py-2 text-black"
+            >
+              <option value="">Select Branch</option>
+              {branches.map((branch) => (
+                <option key={branch} value={branch}>
+                  {branch}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white border rounded p-4 max-w-md ml-auto space-y-2">
         <div className="text-black font-semibold text-lg">Payment Details</div>

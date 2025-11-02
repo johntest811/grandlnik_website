@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from "../Clients/Supabase/SupabaseClients";
-import TopNavBarLoggedIn from '@/components/TopNavBarLoggedIn';
+import UnifiedTopNavBar from '@/components/UnifiedTopNavBar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 
@@ -32,7 +32,7 @@ export default function DeliveryPage() {
 
   return (
     <div className="bg-white text-gray-800">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
 
       {/* Hero */}
       <section className="text-center py-12 bg-gray-100">

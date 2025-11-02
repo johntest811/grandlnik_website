@@ -3,7 +3,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 import dynamic from "next/dynamic";
 import { createClient } from "@supabase/supabase-js";
@@ -66,13 +66,15 @@ function ProductDetailsPageContent() {
 
   // Add to Wishlist with confirmation
   const handleAddToWishlist = async () => {
-    if (!window.confirm("Add this product to your wishlist?")) return;
     const { data: userData } = await supabase.auth.getUser();
     const userId = (userData as any)?.user?.id;
     if (!userId) {
-      alert("Please log in to add to wishlist.");
+      if (window.confirm("Please log in to add to wishlist. Would you like to go to the login page?")) {
+        router.push("/login");
+      }
       return;
     }
+    if (!window.confirm("Add this product to your wishlist?")) return;
     const { error } = await supabase
       .from("user_items")
       .insert([
@@ -113,7 +115,9 @@ function ProductDetailsPageContent() {
 
   const handleAddToCart = async () => {
     if (!userId || !product) {
-      alert("Please sign in to add to cart.");
+      if (window.confirm("Please sign in to add to cart. Would you like to go to the login page?")) {
+        router.push("/login");
+      }
       return;
     }
     setAdding(true);
@@ -145,7 +149,7 @@ function ProductDetailsPageContent() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
       <div className="flex-1 flex flex-col items-center py-10 bg-white">
         <div className="w-full max-w-4xl xl:max-w-6xl bg-white rounded shadow p-12">
           {/* Carousel */}
@@ -236,67 +240,91 @@ function ProductDetailsPageContent() {
           </div>
           
           {/* Actions */}
-          <div className="flex gap-8 mt-10">
+          <div className="flex flex-wrap gap-4 mt-10">
+            {/* 3D View Button */}
             <button
               disabled={!has3DModels}
               onClick={() => setShow3D(true)}
-              className={`flex flex-col items-center px-6 py-4 rounded border transition-all duration-200
-                ${has3DModels
-                  ? "bg-black text-white hover:bg-gray-900 hover:scale-105"
-                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                }`}
+              className={`group relative flex items-center gap-3 px-8 py-4 rounded-lg font-semibold text-base shadow-lg transition-all duration-300 transform ${
+                has3DModels
+                  ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:scale-105 active:scale-95"
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed shadow-md"
+              }`}
               title={has3DModels ? `View ${fbxUrls.length} 3D Model${fbxUrls.length > 1 ? 's' : ''}` : "No 3D models available"}
             >
-              <span className="font-bold text-base">3D</span>
-              <span className="text-base">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+              </svg>
+              <span>
                 3D View {has3DModels && fbxUrls.length > 1 ? `(${fbxUrls.length})` : ''}
               </span>
             </button>
             
+            {/* Add to Wishlist Button */}
             <button
               onClick={handleAddToWishlist}
-              className="flex flex-col items-center px-6 py-4 rounded border bg-gray-100 text-gray-700 transition-all duration-200 hover:bg-red-100 hover:text-red-700 hover:scale-105"
+              className="group relative flex items-center gap-3 px-8 py-4 rounded-lg font-semibold text-base bg-gradient-to-r from-pink-500 to-red-500 text-white shadow-lg hover:from-pink-600 hover:to-red-600 hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95"
             >
-              <span className="font-bold text-base">♥</span>
-              <span className="text-base">Add to Wishlist</span>
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+              </svg>
+              <span>Add to Wishlist</span>
             </button>
             
+            {/* Reserve Now Button */}
             <button
               onClick={handleReserveNow}
               disabled={isOutOfStock}
-              className={`px-8 py-4 rounded font-semibold text-xl transition-all duration-200 ${
+              className={`group relative flex items-center gap-3 px-10 py-4 rounded-lg font-bold text-lg shadow-lg transition-all duration-300 transform ${
                 isOutOfStock
-                  ? 'bg-gray-400 text-white cursor-not-allowed'
-                  : 'bg-red-600 text-white hover:bg-red-700 hover:scale-105'
+                  ? 'bg-gray-400 text-white cursor-not-allowed shadow-md'
+                  : 'bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-700 hover:to-red-800 hover:shadow-xl hover:scale-105 active:scale-95'
               }`}
             >
-              {isOutOfStock ? 'Out of Stock' : 'Reserve Now (₱500)'}
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <span>{isOutOfStock ? 'Out of Stock' : 'Reserve Now (₱500)'}</span>
             </button>
           </div>
 
           {/* Quantity Selector and Add to Cart Button */}
-          <div className="flex items-center gap-3 mt-4">
-            <div className="flex items-center border rounded">
+          <div className="flex items-center gap-4 mt-6">
+            {/* Quantity Selector */}
+            <div className="flex items-center border-2 border-gray-300 rounded-lg overflow-hidden shadow-sm hover:border-blue-400 transition-colors duration-200">
               <button
                 onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                className="px-3 py-2"
+                className="px-5 py-3 bg-white hover:bg-blue-50 text-gray-700 hover:text-blue-600 font-semibold transition-colors duration-200 border-r border-gray-300"
               >
-                -
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4" />
+                </svg>
               </button>
-              <span className="px-4 text-black">{quantity}</span>
+              <span className="px-8 py-3 text-lg font-bold text-gray-800 bg-white min-w-[60px] text-center">{quantity}</span>
               <button
                 onClick={() => setQuantity(q => q + 1)}
-                className="px-3 py-2"
+                className="px-5 py-3 bg-white hover:bg-blue-50 text-gray-700 hover:text-blue-600 font-semibold transition-colors duration-200 border-l border-gray-300"
               >
-                +
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                </svg>
               </button>
             </div>
+            
+            {/* Add to Cart Button */}
             <button
               onClick={handleAddToCart}
-              disabled={adding}
-              className="px-5 py-2 bg-[#8B1C1C] text-white rounded hover:bg-[#a83232]"
+              disabled={adding || isOutOfStock}
+              className={`flex items-center gap-3 px-8 py-3 rounded-lg font-semibold text-base shadow-lg transition-all duration-300 transform ${
+                adding || isOutOfStock
+                  ? 'bg-gray-400 text-white cursor-not-allowed'
+                  : 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 hover:shadow-xl hover:scale-105 active:scale-95'
+              }`}
             >
-              {adding ? "Adding..." : "Add to Cart"}
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <span>{adding ? "Adding..." : isOutOfStock ? "Out of Stock" : "Add to Cart"}</span>
             </button>
           </div>
 

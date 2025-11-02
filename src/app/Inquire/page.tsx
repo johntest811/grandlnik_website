@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 import { createClient } from "@supabase/supabase-js";
 
@@ -107,7 +107,7 @@ export default function InquirePage() {
 
   return (
     <div className="bg-white text-black">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
 
       <section className="py-12 px-4 max-w-6xl mx-auto">
         <div className="bg-white shadow-lg rounded-xl p-8 grid md:grid-cols-2 gap-8 items-start">

@@ -1,35 +1,22 @@
-import { FaEnvelope, FaLock, FaUser } from "react-icons/fa";
-import Image from "next/image";
-import TopNavBar from "@/components/TopNavBar";
-import Footer from "@/components/Footer";
-import Link from "next/link";
+"use client";
 
-export default function RegisterPage() {
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+export default function RootPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect to home page
+    router.push("/home");
+  }, [router]);
+
   return (
-    <div
-      className="relative min-h-screen font-sans bg-cover bg-center flex flex-col"
-      style={{ backgroundImage: 'url("/background-login.jpg")' }}
-    >
-      <TopNavBar/>
-      
-      <main className="flex-1 flex flex-col items-center justify-center bg-cover bg-center">
-        
-      
-        <h1 className="mt-12 text-4xl font-bold text-white mb-4 drop-shadow-lg">
-          Welcome to Grand East Glass and Aluminum
-        </h1>
-        <p className="text-lg text-white drop-shadow-lg mb-8 text-center max-w-xl">
-          We provide top-quality glass and aluminum products and services for your
-          home and business needs.
-        </p>
-  {/* Login Button */}
-    <Link href="/login">
-    <button className="bg-[#8B1C1C] text-whitee font-semibold rounded px-6 py-3 mb-12">Login Now</button>
-     </Link>
-
-      
-      </main>
-      <Footer />
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#8B1C1C]"></div>
+        <p className="mt-4 text-gray-600">Redirecting to home page...</p>
+      </div>
     </div>
   );
 }

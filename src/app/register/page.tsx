@@ -2,7 +2,7 @@
 import { FaEnvelope, FaLock, FaUser, FaGoogle, FaCheckCircle } from "react-icons/fa";
 import { supabase } from "@/app/Clients/Supabase/SupabaseClients";
 import { useState } from "react";
-import TopNavBar from "@/components/TopNavBar";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import { ReactNode } from "react";
 
 export default function RegisterPage() {
@@ -94,7 +94,7 @@ export default function RegisterPage() {
       className="relative min-h-screen font-sans bg-cover bg-center flex flex-col"
       style={{ backgroundImage: 'url("/sevices.avif")' }}
     >
-      <TopNavBar />
+      <UnifiedTopNavBar />
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center">
         <div className="bg-white/95 rounded-xl shadow-lg px-8 py-10 w-full max-w-md flex flex-col items-center relative z-10 mt-12 mb-12">

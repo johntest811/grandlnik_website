@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import TopNavBarLoggedIn from "@/components/TopNavBarLoggedIn";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import Footer from "@/components/Footer";
 import { FaUserCircle, FaMapMarkerAlt, FaBell, FaCog, FaQuestionCircle } from "react-icons/fa";
 import { useState, useEffect } from "react";
@@ -58,7 +58,7 @@ export default function ProfileLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <TopNavBarLoggedIn />
+      <UnifiedTopNavBar />
       <main className="flex-1 flex flex-row">
         {/* Sidebar */}
         <aside className="w-64 bg-white border-r flex flex-col items-center py-8 px-4 min-h-screen">

@@ -69,8 +69,10 @@ export async function POST(request: NextRequest) {
       const userItemIdsCsv = orderData.purchase_units?.[0]?.custom_id || orderData.purchase_units?.[0]?.reference_id;
       const ids = String(userItemIdsCsv || "").split(",").map((s: string) => s.trim()).filter(Boolean);
 
+      console.log('🔍 Processing PayPal payment for items:', ids);
+
       if (ids.length === 0) {
-        console.error('No user_item_id in PayPal order');
+        console.error('❌ No user_item_id in PayPal order');
         return NextResponse.json({ error: 'Invalid order data' }, { status: 400 });
       }
 
@@ -83,13 +85,28 @@ export async function POST(request: NextRequest) {
       let cartUserId: string | null = null;
 
       for (const id of ids) {
+        // Try to find the item (could be cart or reservation)
         const { data: userItem } = await supabase
           .from('user_items')
-          .select('user_id, product_id, quantity, meta, reservation_fee, item_type, order_status')
+          .select('user_id, product_id, quantity, meta, reservation_fee, item_type, order_status, delivery_address_id, price, status')
           .eq('id', id)
           .single();
 
-        if (!userItem) continue;
+        if (!userItem) {
+          console.warn(`⚠️ Item ${id} not found`);
+          continue;
+        }
+
+        // Determine if this is a cart item or already a reservation
+        const isCartItem = userItem.item_type === 'cart';
+        const isReservation = userItem.item_type === 'reservation';
+
+        console.log(`📋 Item ${id}: type=${userItem.item_type}, status=${userItem.status}, isCart=${isCartItem}, isReservation=${isReservation}`);
+
+        if (!isCartItem && !isReservation) {
+          console.warn(`⚠️ Item ${id} is neither cart nor reservation (type: ${userItem.item_type})`);
+          continue;
+        }
         
         if (!cartUserId) cartUserId = userItem.user_id;        const itemMeta = userItem.meta || {};
         const reservationFee = Number(itemMeta.reservation_fee ?? userItem.reservation_fee ?? 500);
@@ -112,36 +129,51 @@ export async function POST(request: NextRequest) {
   if (orderDiscountValue === 0) orderDiscountValue = discountValue;
   if (orderReservationFee === 0) orderReservationFee = reservationFee;
 
-        await supabase
-          .from('user_items')
-          .update({
-            item_type: 'reservation',
-            status: 'reserved',
-            order_status: 'reserved',
-            order_progress: 'payment_completed',
-            payment_status: 'completed',
-            payment_id: orderId,
-            total_paid: finalTotalPerItem,
-            total_amount: lineAfterDiscount,
+        // Prepare update data
+        const updateData: any = {
+          status: 'reserved',
+          order_status: 'reserved',
+          order_progress: 'payment_completed',
+          payment_status: 'completed',
+          payment_id: orderId,
+          price: Number((userItem as any).price || 0),
+          total_paid: finalTotalPerItem,
+          total_amount: lineAfterDiscount,
+          payment_method: 'paypal',
+          meta: {
+            ...itemMeta,
+            payment_confirmed_at: new Date().toISOString(),
             payment_method: 'paypal',
-            meta: {
-              ...itemMeta,
-              payment_confirmed_at: new Date().toISOString(),
-              payment_method: 'paypal',
-              paypal_order_id: orderId,
-              subtotal,
-              addons_total: addonsTotal,
-              discount_value: discountValue,
-              total_amount: lineAfterDiscount,
-              reservation_fee: reservationFee,
-              reservation_fee_share: reservationShare,
-              addons_total_per_item: addonsPerItem,
-              final_total_per_item: finalTotalPerItem,
-              payment_type: itemMeta.payment_type ?? 'reservation',
-            },
-            updated_at: new Date().toISOString(),
-          })
+            paypal_order_id: orderId,
+            subtotal,
+            addons_total: addonsTotal,
+            discount_value: discountValue,
+            total_amount: lineAfterDiscount,
+            reservation_fee: reservationFee,
+            reservation_fee_share: reservationShare,
+            addons_total_per_item: addonsPerItem,
+            final_total_per_item: finalTotalPerItem,
+            payment_type: itemMeta.payment_type ?? 'reservation',
+          },
+          updated_at: new Date().toISOString(),
+        };
+
+        // If it's a cart item, also convert it to reservation
+        if (isCartItem) {
+          updateData.item_type = 'reservation';
+        }
+
+        const { error: updateErr } = await supabase
+          .from('user_items')
+          .update(updateData)
           .eq('id', id);
+
+        if (updateErr) {
+          console.error(`❌ Failed to update item ${id}:`, updateErr);
+        } else {
+          const action = isCartItem ? 'Converted cart item' : 'Updated reservation';
+          console.log(`✅ ${action} ${id} to reserved status`);
+        }
 
         notifiedItems.push({
           id,

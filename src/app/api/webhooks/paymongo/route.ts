@@ -33,6 +33,11 @@ export async function POST(request: NextRequest) {
       const reservationFee = Number(meta?.reservation_fee || (paymentType === 'reservation' ? 500 : 0));
       const totalAmount = Number(meta?.total_amount || amountPaid);
 
+      console.log('🔍 Processing payment for items:', ids);
+      console.log('💰 Amount paid:', amountPaid, 'Total:', totalAmount);
+      console.log('📦 Payment type:', paymentType);
+      console.log('🎫 Reservation fee:', reservationFee);
+
       if (ids.length === 0) {
         console.error('❌ No user_item_id(s) in webhook data');
         return NextResponse.json({ error: 'Invalid webhook data' }, { status: 400 });
@@ -43,13 +48,28 @@ export async function POST(request: NextRequest) {
       let cartUserId: string | null = null;
 
       for (const id of ids) {
+        // Try to find the item (could be cart or reservation)
         const { data: userItem } = await supabase
           .from('user_items')
-          .select('user_id, product_id, quantity, meta, reservation_fee, item_type, order_status')
+          .select('user_id, product_id, quantity, meta, reservation_fee, item_type, order_status, delivery_address_id, price, status')
           .eq('id', id)
           .single();
 
-        if (!userItem) continue;
+        if (!userItem) {
+          console.warn(`⚠️ Item ${id} not found`);
+          continue;
+        }
+
+        // Determine if this is a cart item or already a reservation
+        const isCartItem = userItem.item_type === 'cart';
+        const isReservation = userItem.item_type === 'reservation';
+
+        console.log(`📋 Item ${id}: type=${userItem.item_type}, status=${userItem.status}, isCart=${isCartItem}, isReservation=${isReservation}`);
+
+        if (!isCartItem && !isReservation) {
+          console.warn(`⚠️ Item ${id} is neither cart nor reservation (type: ${userItem.item_type})`);
+          continue;
+        }
         
         if (!cartUserId) cartUserId = userItem.user_id;
 
@@ -66,38 +86,53 @@ export async function POST(request: NextRequest) {
 
         grandTotalPaid += finalTotalPerItem;
 
-        await supabase
-          .from('user_items')
-          .update({
-            item_type: 'reservation',
-            status: 'reserved',
-            order_status: 'reserved',
-            order_progress: 'payment_completed',
-            payment_status: 'completed',
-            payment_id: sessionId,
-            total_paid: finalTotalPerItem,
+        // Prepare update data
+        const updateData: any = {
+          status: 'reserved',
+          order_status: 'reserved',
+          order_progress: 'payment_completed',
+          price: Number(userItem.price || 0),
+          payment_status: 'completed',
+          payment_id: sessionId,
+          total_paid: finalTotalPerItem,
+          total_amount: lineAfterDiscount,
+          reservation_fee: reservationFee,
+          payment_method: 'paymongo',
+          meta: {
+            ...itemMeta,
+            payment_confirmed_at: new Date().toISOString(),
+            amount_paid: finalTotalPerItem,
             total_amount: lineAfterDiscount,
-            reservation_fee: reservationFee,
+            payment_session_id: sessionId,
             payment_method: 'paymongo',
-            meta: {
-              ...itemMeta,
-              payment_confirmed_at: new Date().toISOString(),
-              amount_paid: finalTotalPerItem,
-              total_amount: lineAfterDiscount,
-              payment_session_id: sessionId,
-              payment_method: 'paymongo',
-              subtotal,
-              addons_total: addonsTotal,
-              addons_total_per_item: addonsPerItem,
-              discount_value: discountValue,
-              reservation_fee: reservationFee,
-              reservation_fee_share: reservationShare,
-              final_total_per_item: finalTotalPerItem,
-              payment_type: paymentType,
-            },
-            updated_at: new Date().toISOString(),
-          })
+            subtotal,
+            addons_total: addonsTotal,
+            addons_total_per_item: addonsPerItem,
+            discount_value: discountValue,
+            reservation_fee: reservationFee,
+            reservation_fee_share: reservationShare,
+            final_total_per_item: finalTotalPerItem,
+            payment_type: paymentType,
+          },
+          updated_at: new Date().toISOString(),
+        };
+
+        // If it's a cart item, also convert it to reservation
+        if (isCartItem) {
+          updateData.item_type = 'reservation';
+        }
+
+        const { error: updateErr } = await supabase
+          .from('user_items')
+          .update(updateData)
           .eq('id', id);
+
+        if (updateErr) {
+          console.error(`❌ Failed to update item ${id}:`, updateErr);
+        } else {
+          const action = isCartItem ? 'Converted cart item' : 'Updated reservation';
+          console.log(`✅ ${action} ${id} to reserved status`);
+        }
 
         notifiedItems.push({
           id,
