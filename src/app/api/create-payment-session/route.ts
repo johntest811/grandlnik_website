@@ -149,6 +149,45 @@ async function createPayPalOrder(orderData: any) {
   };
 }
 
+function allocateCents(totalCents: number, weights: number[]): number[] {
+  const normalizedWeights = weights.map((w) => Math.max(0, Math.floor(w)));
+  const count = normalizedWeights.length;
+  if (count === 0 || totalCents <= 0) {
+    return weights.map(() => 0);
+  }
+
+  const weightSum = normalizedWeights.reduce((acc, val) => acc + val, 0);
+  const allocations = new Array(count).fill(0);
+
+  if (weightSum === 0) {
+    const evenShare = Math.floor(totalCents / count);
+    const remainder = totalCents - evenShare * count;
+    for (let i = 0; i < count; i++) {
+      allocations[i] = evenShare + (i === count - 1 ? remainder : 0);
+    }
+    return allocations;
+  }
+
+  let remaining = totalCents;
+  for (let i = 0; i < count; i++) {
+    if (i === count - 1) {
+      allocations[i] += remaining;
+      remaining = 0;
+      break;
+    }
+    const share = Math.floor((normalizedWeights[i] * totalCents) / weightSum);
+    const boundedShare = Math.min(share, remaining);
+    allocations[i] += boundedShare;
+    remaining -= boundedShare;
+  }
+
+  if (remaining > 0) {
+    allocations[count - 1] += remaining;
+  }
+
+  return allocations;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const {
@@ -192,20 +231,26 @@ export async function POST(request: NextRequest) {
     const itemDetails = rows.map((r) => {
       const p = productMap.get(r.product_id);
       const unit = Number(p?.price || 0);
-      const qty = Number(r.quantity || 1);
+      const qty = Math.max(1, Number(r.quantity || 1));
       const addons: any[] = Array.isArray(r.meta?.addons) ? r.meta.addons : [];
-      const lineAddons = addons.reduce((s, a) => s + Number(a?.fee || 0), 0) * qty;
+      const addonTotal = addons.reduce((sum: number, addon: any) => sum + Number(addon?.fee || 0), 0);
       const lineSubtotal = unit * qty;
       subtotal += lineSubtotal;
-      addonsTotal += lineAddons;
-      return { 
-        id: r.id, 
+      addonsTotal += addonTotal;
+
+      const lineSubtotalCents = Math.round(lineSubtotal * 100);
+      const addonsCents = Math.round(addonTotal * 100);
+
+      return {
+        id: r.id,
         name: p?.name || 'Product',
-        qty, 
-        unit, 
-        lineSubtotal, 
-        lineAddons,
-        addons 
+        qty,
+        unit,
+        lineSubtotal,
+        lineSubtotalCents,
+        addonTotal,
+        addonTotalCents: addonsCents,
+        addons,
       };
     });
 
@@ -219,72 +264,36 @@ export async function POST(request: NextRequest) {
     }
     appliedDiscount = Math.min(appliedDiscount, preDiscount);
     
-    const afterDiscount = Math.max(0, preDiscount - appliedDiscount);
-    const lineTotalsCents = itemDetails.map((item) =>
-      Math.round((item.lineSubtotal + item.lineAddons) * 100)
-    );
+    const lineTotalsCents = itemDetails.map((item) => item.lineSubtotalCents + item.addonTotalCents);
     const totalLineCents = lineTotalsCents.reduce((acc, cents) => acc + cents, 0);
     const appliedDiscountCents = Math.round(appliedDiscount * 100);
-    const discountAllocations: number[] = lineTotalsCents.map(() => 0);
-
-    if (totalLineCents > 0 && appliedDiscountCents > 0) {
-      let remaining = appliedDiscountCents;
-      lineTotalsCents.forEach((line, idx) => {
-        if (idx === lineTotalsCents.length - 1) {
-          discountAllocations[idx] = remaining;
-          remaining = 0;
-        } else {
-          const proportional = Math.floor((line * appliedDiscountCents) / totalLineCents);
-          const allocation = Math.min(proportional, remaining);
-          discountAllocations[idx] = allocation;
-          remaining -= allocation;
-        }
-      });
-      if (remaining > 0) {
-        discountAllocations[discountAllocations.length - 1] += remaining;
-      }
-    }
+    const discountAllocations = allocateCents(appliedDiscountCents, lineTotalsCents);
+    const netLineCents = lineTotalsCents.map((gross, idx) => Math.max(0, gross - (discountAllocations[idx] || 0)));
 
     const payMongoLineItems: any[] = [];
     const displayLineItems: any[] = [];
-    let computedProductTotalCents = 0;
+    let netProductTotalCents = 0;
 
-    // Separate product total (without addons) and addon items
     itemDetails.forEach((item, idx) => {
       const grossCents = lineTotalsCents[idx] || 0;
-      const itemDiscountCents = discountAllocations[idx] || 0;
-      
-      // Calculate product price WITHOUT addons
-      const productOnlyLineSubtotal = item.lineSubtotal; // This is product price * qty
-      const productOnlyCents = Math.round(productOnlyLineSubtotal * 100);
-      
-      // Allocate discount proportionally to product only
-      const productDiscountCents = item.lineAddons === 0 
-        ? itemDiscountCents 
-        : Math.round((itemDiscountCents * productOnlyCents) / grossCents);
-      
-      const netProductCents = Math.max(0, productOnlyCents - productDiscountCents);
-      const unitNetCents = item.qty > 0 ? Math.round(netProductCents / item.qty) : 0;
-      computedProductTotalCents += unitNetCents * item.qty;
+      const discountCents = discountAllocations[idx] || 0;
+      const netCents = netLineCents[idx] || 0;
+      netProductTotalCents += netCents;
 
-      const originalUnitPrice = item.qty > 0 ? (productOnlyCents / item.qty) / 100 : 0;
-      const netUnitPrice = unitNetCents / 100;
-      const discountValue = productDiscountCents / 100;
+      const unitNetCents = item.qty > 0 ? Math.round(netCents / item.qty) : netCents;
+      const unitNetPrice = unitNetCents / 100;
 
       const descriptionParts: string[] = [];
-      descriptionParts.push(`Qty: ${item.qty}`);
-      descriptionParts.push(`Unit after discount: ₱${netUnitPrice.toFixed(2)}`);
-      if (productDiscountCents > 0) {
-        descriptionParts.push(`Discount applied: ₱${discountValue.toFixed(2)}`);
+      descriptionParts.push(`Unit price after discount: ₱${unitNetPrice.toFixed(2)}`);
+      if (item.addonTotal > 0) {
+        descriptionParts.push(`Add-ons: ₱${item.addonTotal.toFixed(2)} (${item.addons.map((a: any) => a?.label || a?.key).join(', ')})`);
+      }
+      if (discountCents > 0) {
+        descriptionParts.push(`Total discount: -₱${(discountCents / 100).toFixed(2)}`);
       }
 
-      const baseLabel = `${item.name} @ ₱${netUnitPrice.toFixed(2)}`;
-      const nameWithContext = productDiscountCents > 0
-        ? `${baseLabel} (Discounted)`
-        : baseLabel;
-
       payMongoLineItems.push({
-        name: nameWithContext,
+        name: item.addonTotal > 0 ? `${item.name} (+addons)` : item.name,
         quantity: item.qty,
         amount: unitNetCents,
         currency: 'PHP',
@@ -295,40 +304,19 @@ export async function POST(request: NextRequest) {
         type: 'product',
         name: item.name,
         quantity: item.qty,
-        original_unit_price: Number(originalUnitPrice.toFixed(2)),
-        unit_price: Number(netUnitPrice.toFixed(2)),
-        discount_value: Number(discountValue.toFixed(2)),
-        line_total: Number((netProductCents / 100).toFixed(2))
+        base_amount: Number((grossCents / 100).toFixed(2)),
+        discount_value: Number((discountCents / 100).toFixed(2)),
+        addons_total: Number(item.addonTotal.toFixed(2)),
+        line_total: Number((netCents / 100).toFixed(2))
       });
-
-      // Add color customization as separate line item if exists
-      const colorAddon = item.addons.find((a: any) => a.key === 'color_customization');
-      if (colorAddon) {
-        const colorAddonPrice = 2500; // Fixed price for color customization
-        const colorAddonCents = colorAddonPrice * 100;
-        computedProductTotalCents += colorAddonCents;
-
-        payMongoLineItems.push({
-          name: 'Color Addon',
-          quantity: 1,
-          amount: colorAddonCents,
-          currency: 'PHP',
-          description: `Color customization: ${colorAddon.value || 'Custom color'}`
-        });
-
-        displayLineItems.push({
-          type: 'addon',
-          name: 'Color Addon',
-          quantity: 1,
-          unit_price: colorAddonPrice,
-          line_total: colorAddonPrice
-        });
-      }
     });
 
     // Reservation Fee is ALWAYS ₱500 (fixed, no adjustments)
     const reservationFeeBase = 500;
     const reservationFeeCents = 50000; // ₱500.00 in centavos
+
+    const reservationWeights = netLineCents.some((c) => c > 0) ? netLineCents : lineTotalsCents;
+    const reservationAllocations = allocateCents(reservationFeeCents, reservationWeights);
 
     const reservationLineItem = {
       name: 'Reservation Fee',
@@ -346,8 +334,8 @@ export async function POST(request: NextRequest) {
       line_total: 500
     });
 
-    // Final total = products + color addons + reservation fee
-    const finalTotalCents = computedProductTotalCents + reservationFeeCents;
+    // Final total = products (after discount) + reservation fee
+    const finalTotalCents = netProductTotalCents + reservationFeeCents;
 
     if (appliedDiscountCents > 0) {
       const discountLabel = voucher?.code ? `Discount (${voucher.code})` : 'Discount';
@@ -368,41 +356,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const reservationFeeCharged = reservationLineItem.amount / 100;
-    const totalAmount = afterDiscount + reservationFeeCharged;
+    const reservationFeeCharged = reservationFeeCents / 100;
+    const totalAmount = Number((finalTotalCents / 100).toFixed(2));
 
     const payPalItems: any[] = [];
     itemDetails.forEach((item, idx) => {
-      const grossCents = lineTotalsCents[idx] || 0;
-      const itemDiscountCents = discountAllocations[idx] || 0;
-      
-      // Calculate product price WITHOUT addons for PayPal
-      const productOnlyLineSubtotal = item.lineSubtotal;
-      const productOnlyCents = Math.round(productOnlyLineSubtotal * 100);
-      const productDiscountCents = item.lineAddons === 0 
-        ? itemDiscountCents 
-        : Math.round((itemDiscountCents * productOnlyCents) / grossCents);
-      
-      const netProductValue = Math.max(0, (productOnlyCents - productDiscountCents) / 100);
-      const unitNetValue = item.qty > 0 ? netProductValue / item.qty : 0;
-      const usdUnit = Number((unitNetValue / 50).toFixed(2));
-      
+      const netValuePhp = Math.max(0, (netLineCents[idx] || 0) / 100);
+      const unitNetValuePhp = item.qty > 0 ? netValuePhp / item.qty : netValuePhp;
+      const usdUnit = Number((unitNetValuePhp / 50).toFixed(2));
+
       payPalItems.push({
-        name: productDiscountCents > 0 ? `${item.name} (Discounted)` : item.name,
-        quantity: item.qty,
+        name: item.addonTotal > 0 ? `${item.name} (+addons)` : item.name,
+        quantity: String(item.qty),
         unit_amount: usdUnit.toFixed(2)
       });
-
-      // Add color addon as separate PayPal item if exists
-      const colorAddon = item.addons.find((a: any) => a.key === 'color_customization');
-      if (colorAddon) {
-        const colorAddonUsd = Number((2500 / 50).toFixed(2));
-        payPalItems.push({
-          name: 'Color Addon',
-          quantity: 1,
-          unit_amount: colorAddonUsd.toFixed(2)
-        });
-      }
     });
 
     const reservationFeeUsd = Number((reservationFeeCharged / 50).toFixed(2));
@@ -412,25 +379,51 @@ export async function POST(request: NextRequest) {
       unit_amount: reservationFeeUsd.toFixed(2)
     });
 
-    const itemMetaMap = new Map<string, { lineDiscountValue: number; lineTotalAfterDiscount: number }>();
+    const itemMetaMap = new Map<string, {
+      lineDiscountValue: number;
+      lineTotalAfterDiscount: number;
+      reservationShare: number;
+      finalTotal: number;
+      addonsTotal: number;
+    }>();
     itemDetails.forEach((item, idx) => {
       const discountValue = (discountAllocations[idx] || 0) / 100;
-      const netLineTotal = Math.max(0, (lineTotalsCents[idx] - (discountAllocations[idx] || 0)) / 100);
+      const netLineTotal = Math.max(0, (netLineCents[idx] || 0) / 100);
+      const reservationShare = (reservationAllocations[idx] || 0) / 100;
+      const finalTotal = netLineTotal + reservationShare;
       itemMetaMap.set(item.id, {
         lineDiscountValue: Number(discountValue.toFixed(2)),
         lineTotalAfterDiscount: Number(netLineTotal.toFixed(2)),
+        reservationShare: Number(reservationShare.toFixed(2)),
+        finalTotal: Number(finalTotal.toFixed(2)),
+        addonsTotal: Number(item.addonTotal.toFixed(2)),
       });
     });
 
-    // Update meta for all items
+    // Update meta for all items and prepare them for reservation
     for (const r of rows) {
       const item = itemDetails.find(i => i.id === r.id)!;
-      const metaInfo = itemMetaMap.get(item.id) || { lineDiscountValue: 0, lineTotalAfterDiscount: 0 };
+      const metaInfo = itemMetaMap.get(item.id) || {
+        lineDiscountValue: 0,
+        lineTotalAfterDiscount: 0,
+        reservationShare: 0,
+        finalTotal: 0,
+        addonsTotal: 0,
+      };
+      const product = productMap.get(r.product_id);
       await supabase
         .from('user_items')
         .update({
+          item_type: 'reservation',
+          status: 'pending_payment',
+          order_status: 'pending_payment',
+          order_progress: 'awaiting_payment',
+          price: Number(product?.price || 0),
+          total_amount: metaInfo.lineTotalAfterDiscount,
+          reservation_fee: reservationFeeCharged,
           meta: {
             ...(r.meta || {}),
+            product_name: product?.name || 'Product',
             voucher_code: voucher?.code || null,
             discount_value: appliedDiscount,
             line_discount_value: metaInfo.lineDiscountValue,
@@ -440,11 +433,26 @@ export async function POST(request: NextRequest) {
             reservation_fee: reservationFeeCharged,
             reservation_fee_base: reservationFeeBase,
             line_total_after_discount: metaInfo.lineTotalAfterDiscount,
+            reservation_fee_share: metaInfo.reservationShare,
+            final_total_per_item: metaInfo.finalTotal,
+            addons_total_per_item: metaInfo.addonsTotal,
+            payment_type,
           },
           updated_at: new Date().toISOString()
         })
         .eq('id', r.id);
     }
+
+    const perItemSummary = itemDetails.map((item, idx) => ({
+      id: item.id,
+      quantity: item.qty,
+      gross_total: Number((lineTotalsCents[idx] / 100).toFixed(2)),
+      discount_value: Number((discountAllocations[idx] / 100).toFixed(2)),
+      net_total: Number((netLineCents[idx] / 100).toFixed(2)),
+      reservation_fee_share: Number(((reservationAllocations[idx] || 0) / 100).toFixed(2)),
+      final_total: Number(((netLineCents[idx] + (reservationAllocations[idx] || 0)) / 100).toFixed(2)),
+      addons_total: Number(item.addonTotal.toFixed(2)),
+    }));
 
     const baseMetadata = {
       user_item_ids: ids.join(','),
@@ -457,6 +465,7 @@ export async function POST(request: NextRequest) {
       reservation_fee_base: reservationFeeBase,
       total_amount: totalAmount,
       line_items_json: JSON.stringify(displayLineItems),
+      per_item_summary_json: JSON.stringify(perItemSummary),
     };
 
     let sessionId: string;

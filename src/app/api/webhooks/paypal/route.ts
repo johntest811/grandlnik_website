@@ -74,37 +74,43 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid order data' }, { status: 400 });
       }
 
-      const notifiedItems: { id: string; product_id: string; quantity: number }[] = [];
+      const notifiedItems: { id: string; product_id: string; quantity: number; total_paid: number; user_id?: string }[] = [];
       let grandTotal = 0; // accumulate total for admin notify
+      let orderSubtotal = 0;
+      let orderAddonsTotal = 0;
+      let orderDiscountValue = 0;
+      let orderReservationFee = 0;
+      let cartUserId: string | null = null;
 
       for (const id of ids) {
         const { data: userItem } = await supabase
           .from('user_items')
-          .select('product_id, quantity, meta')
+          .select('user_id, product_id, quantity, meta, reservation_fee, item_type, order_status')
           .eq('id', id)
           .single();
 
         if (!userItem) continue;
+        
+        if (!cartUserId) cartUserId = userItem.user_id;        const itemMeta = userItem.meta || {};
+        const reservationFee = Number(itemMeta.reservation_fee ?? userItem.reservation_fee ?? 500);
+        const subtotal = Number(itemMeta.subtotal ?? 0);
+        const addonsTotal = Number(itemMeta.addons_total ?? 0);
+        const discountValue = Number(itemMeta.discount_value ?? 0);
+        const lineAfterDiscount = Number(itemMeta.line_total_after_discount ?? itemMeta.line_total ?? 0);
+        const addonsPerItem = Number(itemMeta.addons_total_per_item ?? itemMeta.addons_total ?? 0);
+        const storedShare = Number(itemMeta.reservation_fee_share ?? 0);
+        const fallbackShare = ids.length > 0 ? reservationFee / ids.length : reservationFee;
+        const reservationShareRaw = storedShare || fallbackShare;
+        const reservationShare = Number(reservationShareRaw.toFixed(2));
+        const storedFinal = Number(itemMeta.final_total_per_item ?? 0);
+        const computedFinal = lineAfterDiscount + reservationShare;
+        const finalTotalPerItem = Number((storedFinal > 0 ? storedFinal : computedFinal).toFixed(2));
 
-        const { data: product } = await supabase
-          .from('products')
-          .select('inventory, name, price')
-          .eq('id', userItem.product_id)
-          .single();
-
-        const unit = Number(product?.price || 0);
-        const qty = Number(userItem.quantity || 1);
-        const addons: any[] = Array.isArray(userItem.meta?.addons) ? userItem.meta.addons : [];
-        const addonsLine = addons.reduce((s, a) => s + Number(a?.fee || 0), 0) * qty;
-        const subtotal = unit * qty;
-        const addonsTotal = addonsLine;
-        const discountValue = Number(userItem.meta?.voucher_discount || 0);
-        const reservationFee = 500; // reservation flow charges ₱500 upfront
-        const productTotal = Math.max(0, subtotal + addonsTotal - discountValue);
-        const totalAmount = productTotal + reservationFee; // include reservation fee in total
-        grandTotal += totalAmount;
-        const stockBefore = Number(product?.inventory ?? 0);
-        const newInventory = Math.max(0, stockBefore - qty);
+        grandTotal += finalTotalPerItem;
+  if (orderSubtotal === 0) orderSubtotal = subtotal;
+  if (orderAddonsTotal === 0) orderAddonsTotal = addonsTotal;
+  if (orderDiscountValue === 0) orderDiscountValue = discountValue;
+  if (orderReservationFee === 0) orderReservationFee = reservationFee;
 
         await supabase
           .from('user_items')
@@ -112,31 +118,56 @@ export async function POST(request: NextRequest) {
             item_type: 'reservation',
             status: 'reserved',
             order_status: 'reserved',
-            order_progress: 'payment_confirmed',
+            order_progress: 'payment_completed',
             payment_status: 'completed',
             payment_id: orderId,
-            total_paid: totalAmount,
-            total_amount: totalAmount,
+            total_paid: finalTotalPerItem,
+            total_amount: lineAfterDiscount,
             payment_method: 'paypal',
             meta: {
-              ...userItem.meta,
+              ...itemMeta,
               payment_confirmed_at: new Date().toISOString(),
               payment_method: 'paypal',
               paypal_order_id: orderId,
               subtotal,
               addons_total: addonsTotal,
               discount_value: discountValue,
-              total_amount: totalAmount,
+              total_amount: lineAfterDiscount,
               reservation_fee: reservationFee,
-              product_stock_before: stockBefore,
-              product_stock_after: newInventory,
+              reservation_fee_share: reservationShare,
+              addons_total_per_item: addonsPerItem,
+              final_total_per_item: finalTotalPerItem,
+              payment_type: itemMeta.payment_type ?? 'reservation',
             },
+            updated_at: new Date().toISOString(),
           })
           .eq('id', id);
 
-        if (product) {
-          await supabase.from('products').update({ inventory: newInventory }).eq('id', userItem.product_id);
-          notifiedItems.push({ id, product_id: userItem.product_id, quantity: userItem.quantity });
+        notifiedItems.push({
+          id,
+          product_id: userItem.product_id,
+          quantity: userItem.quantity,
+          total_paid: finalTotalPerItem,
+          user_id: userItem.user_id,
+        });
+      }
+
+      // Clear cart items for this user (items with item_type='cart')
+      if (cartUserId) {
+        try {
+          const { error: clearErr } = await supabase
+            .from('user_items')
+            .delete()
+            .eq('user_id', cartUserId)
+            .eq('item_type', 'cart');
+          
+          if (clearErr) {
+            console.warn('⚠️ Failed to clear cart:', clearErr.message);
+          } else {
+            console.log('✅ Cart cleared for user:', cartUserId);
+          }
+        } catch (e) {
+          console.warn('⚠️ Cart clear error:', e);
         }
       }
 
@@ -165,6 +196,10 @@ export async function POST(request: NextRequest) {
             payment_provider: 'paypal',
             payment_type: 'reservation',
             amount_paid: grandTotal,
+              subtotal: orderSubtotal,
+              addons_total: orderAddonsTotal,
+              discount_value: orderDiscountValue,
+              reservation_fee: orderReservationFee,
             user_item_ids: ids,
           },
         }).select();

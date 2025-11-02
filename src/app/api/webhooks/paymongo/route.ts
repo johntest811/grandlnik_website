@@ -38,25 +38,33 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid webhook data' }, { status: 400 });
       }
 
-      const notifiedItems: { id: string; product_id: string; quantity: number }[] = [];
+      const notifiedItems: { id: string; product_id: string; quantity: number; total_paid: number; user_id?: string }[] = [];
+      let grandTotalPaid = 0;
+      let cartUserId: string | null = null;
+
       for (const id of ids) {
         const { data: userItem } = await supabase
           .from('user_items')
-          .select('product_id, quantity, meta')
+          .select('user_id, product_id, quantity, meta, reservation_fee, item_type, order_status')
           .eq('id', id)
           .single();
 
         if (!userItem) continue;
+        
+        if (!cartUserId) cartUserId = userItem.user_id;
 
-        // Fetch product to track stock delta
-        const { data: product } = await supabase
-          .from('products')
-          .select('inventory, name')
-          .eq('id', userItem.product_id)
-          .single();
+        const itemMeta = userItem.meta || {};
+        const lineAfterDiscount = Number(itemMeta.line_total_after_discount ?? itemMeta.line_total ?? 0);
+        const addonsPerItem = Number(itemMeta.addons_total_per_item ?? itemMeta.addons_total ?? 0);
+        const storedShare = Number(itemMeta.reservation_fee_share ?? 0);
+        const fallbackShare = ids.length > 0 ? reservationFee / ids.length : reservationFee;
+        const reservationShareRaw = storedShare || fallbackShare;
+        const reservationShare = Number(reservationShareRaw.toFixed(2));
+        const storedFinal = Number(itemMeta.final_total_per_item ?? 0);
+        const computedFinal = lineAfterDiscount + reservationShare;
+        const finalTotalPerItem = Number((storedFinal > 0 ? storedFinal : computedFinal).toFixed(2));
 
-        const stockBefore = Number(product?.inventory ?? 0);
-        const newInventory = Math.max(0, stockBefore - Number(userItem.quantity || 0));
+        grandTotalPaid += finalTotalPerItem;
 
         await supabase
           .from('user_items')
@@ -64,39 +72,65 @@ export async function POST(request: NextRequest) {
             item_type: 'reservation',
             status: 'reserved',
             order_status: 'reserved',
-            order_progress: 'payment_confirmed',
+            order_progress: 'payment_completed',
             payment_status: 'completed',
             payment_id: sessionId,
-            total_paid: amountPaid,
-            total_amount: totalAmount,
+            total_paid: finalTotalPerItem,
+            total_amount: lineAfterDiscount,
+            reservation_fee: reservationFee,
             payment_method: 'paymongo',
             meta: {
-              ...userItem.meta,
+              ...itemMeta,
               payment_confirmed_at: new Date().toISOString(),
-              amount_paid: amountPaid,
-              total_amount: totalAmount,
+              amount_paid: finalTotalPerItem,
+              total_amount: lineAfterDiscount,
               payment_session_id: sessionId,
               payment_method: 'paymongo',
               subtotal,
               addons_total: addonsTotal,
+              addons_total_per_item: addonsPerItem,
               discount_value: discountValue,
               reservation_fee: reservationFee,
-              product_stock_before: stockBefore,
-              product_stock_after: newInventory,
+              reservation_fee_share: reservationShare,
+              final_total_per_item: finalTotalPerItem,
+              payment_type: paymentType,
             },
+            updated_at: new Date().toISOString(),
           })
           .eq('id', id);
 
-        if (product) {
-          await supabase.from('products').update({ inventory: newInventory }).eq('id', userItem.product_id);
-          notifiedItems.push({ id, product_id: userItem.product_id, quantity: userItem.quantity });
+        notifiedItems.push({
+          id,
+          product_id: userItem.product_id,
+          quantity: userItem.quantity,
+          total_paid: finalTotalPerItem,
+          user_id: userItem.user_id,
+        });
+      }
+
+      // Clear cart items for this user (items with item_type='cart')
+      if (cartUserId) {
+        try {
+          const { error: clearErr } = await supabase
+            .from('user_items')
+            .delete()
+            .eq('user_id', cartUserId)
+            .eq('item_type', 'cart');
+          
+          if (clearErr) {
+            console.warn('⚠️ Failed to clear cart:', clearErr.message);
+          } else {
+            console.log('✅ Cart cleared for user:', cartUserId);
+          }
+        } catch (e) {
+          console.warn('⚠️ Cart clear error:', e);
         }
       }
 
       if (notifiedItems.length) {
         const paymentLabel = paymentType === 'reservation' ? 'Reservation payment' : 'Order payment';
         const notificationTitle = paymentType === 'reservation' ? 'Reservation Paid' : 'Order Paid';
-        const adminMessage = `${paymentLabel} received via PayMongo. Items: ${notifiedItems.length}. Amount: ₱${Number(amountPaid || 0).toLocaleString()}`;
+        const adminMessage = `${paymentLabel} received via PayMongo. Items: ${notifiedItems.length}. Amount: ₱${Number(grandTotalPaid || amountPaid || 0).toLocaleString()}`;
 
         console.log('📢 Inserting admin notification:', {
           title: notificationTitle,
@@ -117,7 +151,7 @@ export async function POST(request: NextRequest) {
           metadata: {
             payment_provider: 'paymongo',
             payment_type: paymentType,
-            amount_paid: amountPaid,
+            amount_paid: grandTotalPaid || amountPaid,
             subtotal,
             addons_total: addonsTotal,
             discount_value: discountValue,

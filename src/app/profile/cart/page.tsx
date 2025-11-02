@@ -35,6 +35,7 @@ export default function CartPage() {
   const [voucher, setVoucher] = useState("");
   const [voucherInfo, setVoucherInfo] = useState<{ code: string; type: 'percent'|'amount'; value: number } | null>(null);
   const [applying, setApplying] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'paymongo' | 'paypal'>('paymongo');
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -152,9 +153,9 @@ export default function CartPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_item_ids: selectedItems.map(item => item.id),
-          payment_method: "paymongo",
+          payment_method: paymentMethod,
           payment_type: "reservation",
-          success_url: `${window.location.origin}/profile/reserve`,
+          success_url: `${window.location.origin}/profile/reserve?source=cart`,
           cancel_url: `${window.location.origin}/profile/cart`,
           voucher: voucherInfo || undefined
         })
@@ -335,6 +336,27 @@ export default function CartPage() {
 
       <div className="bg-white border rounded p-4 max-w-md ml-auto space-y-2">
         <div className="text-black font-semibold text-lg">Payment Details</div>
+        <div className="text-sm text-black space-y-2">
+          <div className="font-medium">Payment Method</div>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="paymentMethod"
+              checked={paymentMethod === 'paymongo'}
+              onChange={() => setPaymentMethod('paymongo')}
+            />
+            <span>PayMongo (GCash/Maya/Card)</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="paymentMethod"
+              checked={paymentMethod === 'paypal'}
+              onChange={() => setPaymentMethod('paypal')}
+            />
+            <span>PayPal</span>
+          </label>
+        </div>
         <div className="flex justify-between text-sm text-black">
           <span>Product Subtotal</span>
           <span>₱{totals.subtotal.toLocaleString()}</span>

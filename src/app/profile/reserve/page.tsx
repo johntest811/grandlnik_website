@@ -88,16 +88,6 @@ function ProfileReservePageContent() {
 
         setUserId(currentUserId);
 
-        // If redirected from a successful checkout, clear any remaining cart rows
-        try {
-          const shouldClear = searchParams?.get("clearCart") === "1";
-          if (shouldClear) {
-            await fetch(`/api/cart?clear=true&userId=${currentUserId}`, { method: "DELETE", cache: "no-store" });
-          }
-        } catch (e) {
-          console.warn("Could not clear cart after success:", e);
-        }
-
         // Fetch user's reservations
         const { data: userItems, error: itemsError } = await supabase
           .from("user_items")
@@ -212,6 +202,35 @@ function ProfileReservePageContent() {
     } catch (error: any) {
       console.error("Error requesting cancellation:", error);
       alert("Error submitting cancellation request: " + (error.message || "Unknown error"));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const cancelReservation = async (item: UserItem) => {
+    if (!userId) return;
+
+    if (!confirm("Cancel this reservation? This action cannot be undone.")) {
+      return;
+    }
+
+    setActionLoading(item.id);
+    try {
+      const response = await fetch('/api/reservations/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_item_id: item.id, user_id: userId })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to cancel reservation');
+      }
+
+      setItems(prev => prev.filter(existing => existing.id !== item.id));
+      alert('Reservation cancelled successfully.');
+    } catch (error: any) {
+      console.error('Cancel reservation error:', error);
+      alert('Unable to cancel reservation: ' + (error.message || 'Unknown error'));
     } finally {
       setActionLoading(null);
     }
@@ -386,11 +405,21 @@ function ProfileReservePageContent() {
                         View Details
                       </button>
                       
-                      {(item.status === 'reserved' || item.status === 'approved') && (
+                      {(item.status === 'pending_payment' || item.status === 'reserved') && (
+                        <button
+                          onClick={() => cancelReservation(item)}
+                          disabled={actionLoading === item.id}
+                          className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                        >
+                          {actionLoading === item.id ? 'Cancelling...' : 'Cancel Reservation'}
+                        </button>
+                      )}
+
+                      {(item.status === 'approved' || item.status === 'pending_balance_payment') && (
                         <button
                           onClick={() => requestCancellation(item)}
                           disabled={actionLoading === item.id}
-                          className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                          className="px-4 py-2 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
                         >
                           {actionLoading === item.id ? "Processing..." : "Request Cancellation"}
                         </button>
