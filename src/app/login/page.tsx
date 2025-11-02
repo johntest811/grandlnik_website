@@ -11,9 +11,7 @@ import LoadingSuccess from "./LoadingSuccess";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState("");
-  const [confirmationSent, setConfirmationSent] = useState(false);
   const router = useRouter();
 
   const baseUrl =
@@ -23,37 +21,44 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    // Send magic link to user's email
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${baseUrl}/login/confirm`
-      }
-    });
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setShowSuccess(true); // Show "Check your email" message
-  };
 
-  const sendConfirmationEmail = async (email: string) => {
-    // This sends a magic link to the user's email
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: "https://grandlnik-website.vercel.app/login"
-      }
-    });
-    return error;
-  };
+    try {
+      // First, verify email and password with Supabase Auth
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-  const handleSendConfirmation = async () => {
-    const error = await sendConfirmationEmail(email);
-    if (!error) {
-      setConfirmationSent(true);
-    } else {
-      setError("Failed to send confirmation email.");
+      if (signInError) {
+        setError("Invalid email or password");
+        return;
+      }
+
+      // If sign-in successful, immediately sign out (we'll sign in again after MFA)
+      await supabase.auth.signOut();
+
+      // Send verification code via API
+      const response = await fetch('/api/auth/send-verification-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setError(result.error || 'Failed to send verification code');
+        return;
+      }
+
+      // Store email and password temporarily in sessionStorage for verification page
+      sessionStorage.setItem('login_email', email);
+      sessionStorage.setItem('login_password', password);
+
+      // Redirect to verification page
+      router.push('/login/verify');
+    } catch (err: any) {
+      setError(err.message || 'An error occurred');
     }
   };
 
@@ -65,10 +70,6 @@ export default function LoginPage() {
       },
     });
   };
-
-  if (showSuccess) {
-    return <LoadingSuccess />;
-  }
 
   return (
     <div className="relative min-h-screen font-sans bg-cover bg-center flex flex-col" style={{ backgroundImage: 'url("/sevices.avif")' }}>
@@ -125,17 +126,8 @@ export default function LoginPage() {
             <span className="font-medium text-gray-700">Sign in with Google</span>
           </button>
           <div className="text-xs text-center mt-4 text-gray-600">
-            Don’t have an account yet? <a href="register" className="text-blue-600 hover:underline">Sign Up</a>
+            Don't have an account yet? <a href="register" className="text-blue-600 hover:underline">Sign Up</a>
           </div>
-          {error === "Please confirm your Gmail address before logging in. Check your inbox for the confirmation email." && (
-            <button
-              className="bg-blue-600 text-white px-4 py-2 rounded mt-4"
-              onClick={handleSendConfirmation}
-              disabled={confirmationSent}
-            >
-              {confirmationSent ? "Confirmation Sent!" : "Resend Confirmation Email"}
-            </button>
-          )}
         </div>
       </main>
       {/* Optional: Overlay for background dimming */}
