@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { FaEnvelope, FaLock, FaGoogle } from "react-icons/fa";
 import Image from "next/image";
-import TopNavBar from "@/components/TopNavBar";
+import UnifiedTopNavBar from "@/components/UnifiedTopNavBar";
 import { useRouter } from "next/navigation";
 import { supabase } from "../Clients/Supabase/SupabaseClients";
 import LoadingSuccess from "./LoadingSuccess";
@@ -18,7 +18,7 @@ export default function LoginPage() {
 
   const baseUrl =
     process.env.NEXT_PUBLIC_BASE_URL ||
-    (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    (typeof window !== "undefined" ? window.location.origin : "https://grandlnik-website.vercel.app");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +42,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: "http://localhost:3000/login"
+        emailRedirectTo: "https://grandlnik-website.vercel.app/login"
       }
     });
     return error;
@@ -72,7 +72,7 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen font-sans bg-cover bg-center flex flex-col" style={{ backgroundImage: 'url("/sevices.avif")' }}>
-      <TopNavBar />
+      <UnifiedTopNavBar />
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center">
         <div className="bg-white/95 rounded-xl shadow-lg px-8 py-10 w-full max-w-md flex flex-col items-center relative z-10">

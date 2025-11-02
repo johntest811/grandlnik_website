@@ -412,49 +412,36 @@ export default function UnifiedTopNavBar() {
               onClick={() => setOpen(!open)}
               className="flex items-center gap-2 p-2 rounded hover:bg-gray-100 transition"
             >
-              {user ? (
-                <>
-                  {user?.user_metadata?.avatar_url ? (
-                    <Image
-                      src={user.user_metadata.avatar_url}
-                      alt="Profile"
-                      width={32}
-                      height={32}
-                      className="rounded-full border border-gray-300 hover:border-[#8B1C1C] transition"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-700 border border-gray-300 hover:border-[#8B1C1C] transition">
-                      {user?.email ? user.email[0].toUpperCase() : <FaUserCircle />}
-                    </div>
-                  )}
-                  <FaChevronDown className="text-xs text-gray-700" />
-                </>
+              {user?.user_metadata?.avatar_url ? (
+                <img 
+                  src={user.user_metadata.avatar_url} 
+                  alt="Profile" 
+                  className="w-8 h-8 rounded-full object-cover"
+                />
               ) : (
                 <FaUserCircle className="text-2xl text-gray-700" />
               )}
+              {user && <FaChevronDown className="text-xs text-gray-700" />}
             </button>
 
             {open && user && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded shadow-lg border z-50">
-                <div className="px-4 py-3 border-b bg-gray-50 flex items-center gap-3">
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border z-50">
+                <div className="px-4 py-4 border-b bg-gray-50 flex items-center gap-3">
                   {user?.user_metadata?.avatar_url ? (
-                    <Image
-                      src={user.user_metadata.avatar_url}
-                      alt="Profile"
-                      width={40}
-                      height={40}
-                      className="rounded-full border border-gray-300"
+                    <img 
+                      src={user.user_metadata.avatar_url} 
+                      alt="Profile" 
+                      className="w-12 h-12 rounded-full object-cover border-2 border-gray-200"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xl font-bold text-gray-700 border border-gray-300">
-                      {user?.email ? user.email[0].toUpperCase() : <FaUserCircle />}
-                    </div>
+                    <FaUserCircle className="text-4xl text-gray-400" />
                   )}
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {user.email || user.user_metadata?.email || "User"}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "User"}
                     </p>
-                    <p className="text-xs text-gray-500">Logged in</p>
+                    <p className="text-xs text-gray-500 truncate">{user.email || user.user_metadata?.email || ""}</p>
+                    <p className="text-[10px] text-green-600 mt-0.5">● Logged in</p>
                   </div>
                 </div>
                 <ul className="py-2">
@@ -507,10 +494,13 @@ export default function UnifiedTopNavBar() {
             )}
 
             {open && !user && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded shadow-lg border z-50">
-                <div className="px-4 py-3 border-b bg-gray-50">
-                  <p className="text-sm font-medium text-gray-900">Guest User</p>
-                  <p className="text-xs text-gray-500">Not logged in</p>
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border z-50">
+                <div className="px-4 py-4 border-b bg-gray-50 flex items-center gap-3">
+                  <FaUserCircle className="text-4xl text-gray-400" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-900">Guest User</p>
+                    <p className="text-xs text-gray-500">Not logged in</p>
+                  </div>
                 </div>
                 <ul className="py-2">
                   <li>
