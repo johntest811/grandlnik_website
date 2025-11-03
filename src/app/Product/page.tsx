@@ -14,9 +14,44 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Helpers to normalize and match categories robustly
+// This fixes issues where DB values may contain different spacing/casing/plurals
+// Example: "Curtain Wall", "curtain-wall", "CurtainWalls" => all map to key "curtainwall"
+function normalizeKey(s: string): string {
+  return (s ?? "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function extractProductCategoryKeys(p: any): string[] {
+  const raw: string[] = [];
+  // Common fields
+  if (Array.isArray(p?.category)) raw.push(...p.category);
+  else if (typeof p?.category === "string") raw.push(p.category);
+  if (Array.isArray(p?.categories)) raw.push(...p.categories);
+  else if (typeof p?.categories === "string") raw.push(p.categories);
+  if (Array.isArray(p?.tags)) raw.push(...p.tags);
+  if (typeof p?.type === "string") raw.push(p.type);
+
+  // Support comma/pipe/slash-separated strings
+  const parts = raw
+    .flatMap((s) => (typeof s === "string" ? s.split(/[\,\|\/]+/) : []))
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Normalize keys and compress common variants to canonical keys
+  const keys = parts.map((s) => normalizeKey(s));
+  const simplified = keys.map((k) => {
+    if (k.includes("curtainwall") || (k.includes("curtain") && k.includes("wall"))) return "curtainwall";
+    if (k.includes("enclosure")) return "enclosure";
+    return k;
+  });
+
+  return Array.from(new Set(simplified));
+}
+
 function ProductsPageContent() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showSideFilter, setShowSideFilter] = useState(false);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -39,6 +74,19 @@ function ProductsPageContent() {
       setLoading(false);
     };
     fetchProducts();
+  }, []);
+
+  // Toggle side filter visibility based on scroll position (desktop only behavior)
+  useEffect(() => {
+    const onScroll = () => {
+      // Show side filter after user scrolls past the category bar area
+      const threshold = 260; // px; adjust if needed to match design height
+      setShowSideFilter(window.scrollY > threshold);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    // initialize
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   // Get unique categories from products
@@ -93,22 +141,36 @@ function ProductsPageContent() {
     );
   };
 
-  // Filter products by category + search
+  // Filter products by category + search (robust matching)
   const filteredProducts = products.filter((p) => {
+    const selectedKey = normalizeKey(selectedCategory);
+    const productKeys = extractProductCategoryKeys(p);
+
     const matchesCategory =
-      selectedCategory === "All Products" || (p.category || "") === selectedCategory;
+      selectedCategory === "All Products" ||
+      // exact key match from normalized product category keys
+      productKeys.includes(selectedKey) ||
+      // Fallback: if no category data, try deducing from name/description
+      (
+        productKeys.length === 0 &&
+        (normalizeKey(p?.name ?? "").includes(selectedKey) || normalizeKey(p?.description ?? "").includes(selectedKey))
+      );
+
     const q = search.trim().toLowerCase();
     if (!q) return matchesCategory;
     const inName = (p.name || "").toLowerCase().includes(q);
     const inDesc = (p.description || "").toLowerCase().includes(q);
-    const inCategory = (p.category || "").toLowerCase().includes(q);
+    const inCategory =
+      (p.category || "").toLowerCase().includes(q) ||
+      (Array.isArray(p.categories) && p.categories.some((c: any) => (c ?? "").toString().toLowerCase().includes(q))) ||
+      (Array.isArray(p.tags) && p.tags.some((t: any) => (t ?? "").toString().toLowerCase().includes(q)));
     return matchesCategory && (inName || inDesc || inCategory);
   });
 
   return (
     <div className="min-h-screen flex flex-col">
       <UnifiedTopNavBar />
-      <main className="flex-1 bg-white">
+      <main className={`flex-1 bg-white ${showSideFilter ? "lg:pl-64" : ""}`}>
         {/* Search bar */}
         <div className="py-6">
           <div className="max-w-6xl mx-auto px-4 flex justify-center text-black">
@@ -123,7 +185,7 @@ function ProductsPageContent() {
         </div>
 
         {/* Category Tabs */}
-        <section className="py-6 border-b">
+        <section className={`py-6 border-b ${showSideFilter ? "lg:hidden" : ""}`}>
           <div className="flex flex-wrap justify-center gap-4 text-sm font-medium">
             {categories.map((cat) => (
               <button
@@ -140,6 +202,34 @@ function ProductsPageContent() {
             ))}
           </div>
         </section>
+
+        {/* Floating Left Sidebar Filter (shown after scrolling on large screens) */}
+        {showSideFilter && (
+          <aside className="hidden lg:block fixed left-6 top-28 z-40">
+            <div className="w-56 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl shadow-lg p-3">
+              <div className="px-2 pb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Filter</div>
+              <div className="flex flex-col gap-1">
+                {categories.map((cat) => {
+                  const selected = selectedCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => selectCategory(cat)}
+                      className={`w-full text-left px-3 py-2 rounded-lg transition border ${
+                        selected
+                          ? "bg-red-50 text-red-700 border-red-300"
+                          : "bg-white hover:bg-gray-50 text-gray-700 border-transparent"
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+        )}
 
         {/* Product Grid */}
         <section className="py-10 max-w-6xl mx-auto px-4">

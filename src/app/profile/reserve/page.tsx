@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
@@ -72,6 +72,7 @@ function ProfileReservePageContent() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [showFullReceipt, setShowFullReceipt] = useState<{item: UserItem, product: Product} | null>(null);
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -241,6 +242,16 @@ function ProfileReservePageContent() {
     if (product) {
       setShowFullReceipt({ item, product });
     }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleDownloadPDF = () => {
+    // Use browser's print to PDF feature
+    alert("Please use your browser's Print dialog and select 'Save as PDF' as the destination.");
+    window.print();
   };
 
   // Colors -> black
@@ -439,61 +450,245 @@ function ProfileReservePageContent() {
 
       {/* Receipt Modal */}
       {showFullReceipt && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-black">Reservation Details</h2>
-                <button
-                  onClick={() => setShowFullReceipt(null)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
+        <>
+          <style jsx global>{`
+            @media print {
+              @page {
+                size: A4;
+                margin: 15mm;
+              }
+              
+              body * {
+                visibility: hidden;
+              }
+              
+              #receipt-print-area,
+              #receipt-print-area * {
+                visibility: visible;
+              }
+              
+              #receipt-print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                page-break-after: avoid;
+                page-break-inside: avoid;
+              }
+              
+              .no-print {
+                display: none !important;
+              }
+              
+              /* Ensure content fits on one page */
+              #receipt-print-area {
+                max-height: 267mm; /* A4 height minus margins */
+                overflow: hidden;
+              }
+              
+              /* Reduce spacing for print */
+              #receipt-print-area .mb-8 {
+                margin-bottom: 1rem !important;
+              }
+              
+              #receipt-print-area .mb-6 {
+                margin-bottom: 0.75rem !important;
+              }
+              
+              #receipt-print-area .p-8 {
+                padding: 1rem !important;
+              }
+              
+              #receipt-print-area .p-4 {
+                padding: 0.5rem !important;
+              }
+              
+              /* Optimize font sizes for print */
+              #receipt-print-area {
+                font-size: 10pt;
+              }
+              
+              #receipt-print-area h1 {
+                font-size: 20pt;
+              }
+              
+              #receipt-print-area h3 {
+                font-size: 12pt;
+              }
+            }
+          `}</style>
+          
+          <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50 p-4">
+            <div className="bg-white bg-opacity-95 backdrop-blur-sm rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-gray-200">
+              {/* Action Buttons - Hidden in print */}
+              <div className="no-print flex justify-between items-center p-4 border-b bg-white bg-opacity-80">
+                <h2 className="text-lg font-semibold text-gray-800">Reservation Receipt</h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePrint}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print
+                  </button>
+                  <button
+                    onClick={handleDownloadPDF}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    PDF
+                  </button>
+                  <button
+                    onClick={() => setShowFullReceipt(null)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="border-b pb-4">
-                  <h3 className="font-semibold text-black">{showFullReceipt.product.name}</h3>
-                  <p className="text-black font-medium">Order ID: {showFullReceipt.item.id}</p>
+              {/* Receipt Content */}
+              <div 
+                id="receipt-print-area" 
+                ref={receiptRef}
+                className="p-8 bg-white bg-opacity-90"
+                style={{ maxWidth: '210mm', margin: '0 auto' }}
+              >
+                {/* Header */}
+                <div className="text-center mb-8 border-b-2 border-gray-300 pb-6">
+                  <h1 className="text-3xl font-bold text-gray-900 mb-2">GRAND EAST</h1>
+                  <p className="text-sm text-gray-600">Reservation Receipt</p>
+                  <p className="text-xs text-gray-500 mt-1">Thank you for your reservation</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="text-black">
-                    <span className="font-medium">Status:</span>
-                    <span className={`ml-2 px-2 py-1 rounded text-xs ${getStatusColor(showFullReceipt.item.status)}`}>
-                      {getStatusDisplay(showFullReceipt.item.status)}
-                    </span>
-                  </div>
-                  <div className="text-black">
-                    <span className="font-medium">Quantity:</span> {showFullReceipt.item.quantity}
-                  </div>
-                  <div className="text-black">
-                    <span className="font-medium">Created:</span> {new Date(showFullReceipt.item.created_at).toLocaleString()}
-                  </div>
-                  {showFullReceipt.item.updated_at && (
-                    <div className="text-black">
-                      <span className="font-medium">Updated:</span> {new Date(showFullReceipt.item.updated_at).toLocaleString()}
+                {/* Order Information */}
+                <div className="mb-6">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500 font-medium mb-1">Order ID</p>
+                      <p className="text-gray-900 font-mono text-xs break-all">{showFullReceipt.item.id}</p>
                     </div>
-                  )}
-                  <div className="text-black">
-                    {/* Total Price */}
-                    <span className="font-medium">Total Paid:</span> ₱{getItemTotalPrice(showFullReceipt.item, showFullReceipt.product).toLocaleString()}
+                    <div>
+                      <p className="text-gray-500 font-medium mb-1">Status</p>
+                      <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-gray-900 text-white">
+                        {getStatusDisplay(showFullReceipt.item.status)}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 font-medium mb-1">Date Created</p>
+                      <p className="text-gray-900">{new Date(showFullReceipt.item.created_at).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 font-medium mb-1">Quantity</p>
+                      <p className="text-gray-900 font-semibold">{showFullReceipt.item.quantity} unit(s)</p>
+                    </div>
                   </div>
                 </div>
 
-                {showFullReceipt.item.meta && (
-                  <div className="border-t pt-4">
-                    <h4 className="font-medium mb-2 text-black">Additional Details:</h4>
-                    <pre className="text-xs bg-gray-100 p-3 rounded overflow-auto text-black">
-                      {JSON.stringify(showFullReceipt.item.meta, null, 2)}
-                    </pre>
+                {/* Product Details */}
+                <div className="mb-6 border-t border-b border-gray-200 py-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Product Details</h3>
+                  <div className="flex items-start gap-4">
+                    {getProductImage(showFullReceipt.product) && (
+                      <div className="w-20 h-20 bg-gray-100 rounded flex-shrink-0 overflow-hidden">
+                        <Image
+                          src={getProductImage(showFullReceipt.product)}
+                          alt={showFullReceipt.product.name || "Product"}
+                          width={80}
+                          height={80}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 text-lg">{showFullReceipt.product.name}</p>
+                      {showFullReceipt.item.meta?.branch && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          <span className="font-medium">Branch:</span> {showFullReceipt.item.meta.branch}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Summary */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Payment Summary</h3>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                    {showFullReceipt.item.meta?.reservation_fee && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Reservation Fee</span>
+                        <span className="text-gray-900 font-medium">₱{Number(showFullReceipt.item.meta.reservation_fee).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {showFullReceipt.item.meta?.product_price && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Unit Price</span>
+                        <span className="text-gray-900 font-medium">₱{Number(showFullReceipt.item.meta.product_price).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {showFullReceipt.item.meta?.addons_total && Number(showFullReceipt.item.meta.addons_total) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Add-ons</span>
+                        <span className="text-gray-900 font-medium">₱{Number(showFullReceipt.item.meta.addons_total).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {showFullReceipt.item.meta?.discount_value && Number(showFullReceipt.item.meta.discount_value) > 0 && (
+                      <div className="flex justify-between text-sm text-green-600">
+                        <span>Discount</span>
+                        <span className="font-medium">-₱{Number(showFullReceipt.item.meta.discount_value).toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-gray-300 pt-2 mt-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-900 font-bold text-lg">Total Amount</span>
+                        <span className="text-gray-900 font-bold text-xl">₱{getItemTotalPrice(showFullReceipt.item, showFullReceipt.product).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delivery Address */}
+                {showFullReceipt.item.delivery_address_id && addressesById[showFullReceipt.item.delivery_address_id] && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Delivery Information</h3>
+                    <div className="bg-gray-50 rounded-lg p-4 text-sm">
+                      <p className="text-gray-900 font-medium">{addressesById[showFullReceipt.item.delivery_address_id].full_name}</p>
+                      <p className="text-gray-600 mt-1">{addressesById[showFullReceipt.item.delivery_address_id].address}</p>
+                      <p className="text-gray-600">{addressesById[showFullReceipt.item.delivery_address_id].phone}</p>
+                    </div>
                   </div>
                 )}
+
+                {/* Footer */}
+                <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+                  <p className="text-xs text-gray-500 mb-2">
+                    This is an official receipt from Grand East. For inquiries, please contact our customer service.
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Generated on {new Date().toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </section>
   );

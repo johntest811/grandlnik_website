@@ -22,6 +22,7 @@ function ProductDetailsPageContent() {
   const [product, setProduct] = useState<any>(null);
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [show3D, setShow3D] = useState(false);
+  const [weather, setWeather] = useState<"sunny" | "rainy" | "windy" | "foggy">("sunny");
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -405,8 +406,26 @@ function ProductDetailsPageContent() {
               <div className="absolute inset-0 rounded-full border-2 border-transparent group-hover:border-red-200 transition-all duration-300 scale-110 opacity-0 group-hover:opacity-100"></div>
             </button>
 
+            {/* Weather Controls - Fixed to modal frame */}
+            <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-20 flex gap-2">
+              {["sunny", "rainy", "windy", "foggy"].map((w) => (
+                <button
+                  key={w}
+                  className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                    weather === w 
+                      ? "bg-black text-white" 
+                      : "bg-gray-200 text-black hover:bg-gray-300"
+                  }`}
+                  onClick={() => setWeather(w as any)}
+                  aria-label={w}
+                >
+                  {w.charAt(0).toUpperCase() + w.slice(1)}
+                </button>
+              ))}
+            </div>
+
             <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
-              <ThreeDFBXViewer fbxUrls={fbxUrls} />
+              <ThreeDFBXViewer fbxUrls={fbxUrls} weather={weather} />
             </div>
           </div>
         </div>

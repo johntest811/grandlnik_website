@@ -5,13 +5,13 @@ import { FBXLoader, OrbitControls } from "three-stdlib";
 
 type Props = {
   fbxUrls: string[];
+  weather: "sunny" | "rainy" | "windy" | "foggy";
   width?: number;
   height?: number;
 };
 
-export default function ThreeDFBXViewer({ fbxUrls, width = 1200, height = 700 }: Props) {
+export default function ThreeDFBXViewer({ fbxUrls, weather, width = 1200, height = 700 }: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const [weather, setWeather] = useState<"sunny" | "rainy" | "windy" | "foggy">("sunny");
   const [currentFbxIndex, setCurrentFbxIndex] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -778,27 +778,6 @@ export default function ThreeDFBXViewer({ fbxUrls, width = 1200, height = 700 }:
 
       {/* Controls Overlay */}
       <div className="pointer-events-none">
-        {/* Weather Controls */}
-        <div
-          className="absolute top-4 left-1/2 z-[9999] flex gap-2 transform -translate-x-1/2 pointer-events-auto"
-          style={{ maxWidth: "calc(100% - 32px)", overflow: "auto" }}
-        >
-          {["sunny", "rainy", "windy", "foggy"].map((w) => (
-            <button
-              key={w}
-              className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                weather === w 
-                  ? "bg-black text-white" 
-                  : "bg-gray-200 text-black hover:bg-gray-300"
-              }`}
-              onClick={() => setWeather(w as any)}
-              aria-label={w}
-            >
-              {w.charAt(0).toUpperCase() + w.slice(1)}
-            </button>
-          ))}
-        </div>
-
         {/* Multiple FBX Navigation Controls */}
         {validFbxUrls.length > 1 && (
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-[9999] pointer-events-auto">
