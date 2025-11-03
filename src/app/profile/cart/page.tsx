@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 type UserItem = {
@@ -34,6 +35,7 @@ type Address = {
 };
 
 export default function CartPage() {
+  const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [items, setItems] = useState<UserItem[]>([]);
   const [products, setProducts] = useState<Record<string, Product>>({});
@@ -43,71 +45,42 @@ export default function CartPage() {
   const [voucher, setVoucher] = useState("");
   const [voucherInfo, setVoucherInfo] = useState<{ code: string; type: 'percent'|'amount'; value: number } | null>(null);
   const [applying, setApplying] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'paymongo' | 'paypal'>('paymongo');
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
-  const [selectedBranch, setSelectedBranch] = useState<string>("");
-
-  const branches = [
-    "BALINTAWAK BRANCH",
-    "STA. ROSA BRANCH",
-    "UGONG BRANCH",
-    "ALABANG SHOWROOM",
-    "IMUS BRANCH",
-    "PAMPANGA SHOWROOM",
-    "HIHOME BRANCH",
-    "MC HOME DEPO ORTIGAS",
-    "SAN JUAN CITY",
-    "CW COMMONWEALTH",
-    "MC HOME DEPO BGC",
-  ];
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       const uid = data?.user?.id || null;
       setUserId(uid);
       if (!uid) return setLoading(false);
-      
-      // Load addresses
-      const { data: addressData } = await supabase
-        .from("addresses")
-        .select("*")
-        .eq("user_id", uid)
-        .order("is_default", { ascending: false });
-
-      if (addressData) {
-        setAddresses(addressData as any);
-        const def = addressData.find((a: any) => a.is_default);
-        if (def) setSelectedAddressId(def.id);
-      }
-      
       loadCart(uid);
     });
   }, []);
 
-  const loadCart = async (uid: string) => {
-    setLoading(true);
+    const loadCart = async (uid: string) => {
     try {
-      const res = await fetch(`/api/cart?userId=${uid}`, { cache: "no-store" });
-      const json = await res.json();
-      const cartItems: UserItem[] = json.items || [];
-      setItems(cartItems);
+      // Query the cart table instead of user_items
+      const { data: cartData, error: cartError } = await supabase
+        .from("cart")
+        .select("id, product_id, quantity, meta")
+        .eq("user_id", uid);
 
-      if (cartItems.length) {
-        const ids = Array.from(new Set(cartItems.map(item => item.product_id)));
-        const { data: prods } = await supabase
+      if (cartError) throw cartError;
+      setItems(cartData as any || []);
+
+      const productIds = Array.from(new Set(cartData?.map((item: any) => item.product_id) || []));
+      if (productIds.length > 0) {
+        const { data: prodData } = await supabase
           .from("products")
           .select("id, name, price, images, image1")
-          .in("id", ids);
+          .in("id", productIds);
 
         const map: Record<string, Product> = {};
-        (prods || []).forEach(p => {
+        (prodData || []).forEach((p: any) => {
           map[p.id] = p;
         });
         setProducts(map);
-      } else {
-        setProducts({});
       }
+    } catch (error) {
+      console.error("Error loading cart:", error);
     } finally {
       setLoading(false);
     }
@@ -176,7 +149,7 @@ export default function CartPage() {
     loadCart(userId);
   };
 
-  const proceedCheckout = async () => {
+  const proceedCheckout = () => {
     if (!userId) {
       alert("Sign in required.");
       return;
@@ -185,49 +158,10 @@ export default function CartPage() {
       alert("Select at least one item.");
       return;
     }
-    if (!selectedAddressId) {
-      alert("Please select a delivery address.");
-      return;
-    }
-    if (!selectedBranch) {
-      alert("Please select a pickup branch.");
-      return;
-    }
-    setProcessing(true);
-    try {
-      // Update cart items with address and branch before checkout
-      for (const item of selectedItems) {
-        await fetch("/api/cart", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: item.id,
-            meta: { ...(item.meta || {}), branch: selectedBranch },
-            delivery_address_id: selectedAddressId
-          })
-        });
-      }
-
-      const res = await fetch("/api/create-payment-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_item_ids: selectedItems.map(item => item.id),
-          payment_method: paymentMethod,
-          payment_type: "reservation",
-          success_url: `${window.location.origin}/profile/reserve?source=cart`,
-          cancel_url: `${window.location.origin}/profile/cart`,
-          voucher: voucherInfo || undefined
-        })
-      });
-      const json = await res.json();
-      if (!res.ok || !json.checkoutUrl) throw new Error(json.error || "Checkout failed");
-      window.location.href = json.checkoutUrl;
-    } catch (error: any) {
-      alert(error.message);
-    } finally {
-      setProcessing(false);
-    }
+    
+    // Navigate to checkout page with selected items
+    const itemIds = selectedItems.map(item => item.id).join(",");
+    router.push(`/profile/cart/checkout?items=${itemIds}`);
   };
 
   const applyVoucher = async () => {
@@ -264,24 +198,27 @@ export default function CartPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            checked={selectedItems.length === items.length && items.length > 0}
-            onChange={event => toggleAll(event.target.checked)}
-          />
-          <span className="text-black">
-            Select All ({selectedItems.length}/{items.length})
-          </span>
-        </div>
-        <button onClick={clearCart} className="text-red-600 hover:underline">
-          Clear Cart
-        </button>
-      </div>
+    <div className="p-6">
+      <div className="flex gap-6">
+        {/* Left side - Cart Items */}
+        <div className="flex-1 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={selectedItems.length === items.length && items.length > 0}
+                onChange={event => toggleAll(event.target.checked)}
+              />
+              <span className="text-black">
+                Select All ({selectedItems.length}/{items.length})
+              </span>
+            </div>
+            <button onClick={clearCart} className="text-red-600 hover:underline">
+              Clear Cart
+            </button>
+          </div>
 
-      <div className="space-y-4">
+          <div className="space-y-4">
         {items.map(item => {
           const product = products[item.product_id];
           const image =
@@ -397,119 +334,76 @@ export default function CartPage() {
           <div className="p-8 text-center text-black border rounded bg-white">Your cart is empty.</div>
         )}
       </div>
+        </div>
 
-      {items.length > 0 && (
-        <div className="bg-white border rounded p-4 max-w-md ml-auto space-y-4 mb-4">
-          <div className="text-black font-semibold text-lg">Delivery Information</div>
-          
-          <div>
-            <label className="block text-sm font-medium text-black mb-2">Delivery Address</label>
-            <select
-              value={selectedAddressId}
-              onChange={(e) => setSelectedAddressId(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-black"
-            >
-              <option value="">Select Address</option>
-              {addresses.map((addr) => (
-                <option key={addr.id} value={addr.id}>
-                  {addr.full_name} - {addr.address} {addr.is_default && "(Default)"}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-black mb-2">Pickup Branch</label>
-            <select
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-black"
-            >
-              <option value="">Select Branch</option>
-              {branches.map((branch) => (
-                <option key={branch} value={branch}>
-                  {branch}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white border rounded p-4 max-w-md ml-auto space-y-2">
-        <div className="text-black font-semibold text-lg">Payment Details</div>
-        <div className="text-sm text-black space-y-2">
-          <div className="font-medium">Payment Method</div>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="paymentMethod"
-              checked={paymentMethod === 'paymongo'}
-              onChange={() => setPaymentMethod('paymongo')}
-            />
-            <span>PayMongo (GCash/Maya/Card)</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="paymentMethod"
-              checked={paymentMethod === 'paypal'}
-              onChange={() => setPaymentMethod('paypal')}
-            />
-            <span>PayPal</span>
-          </label>
-        </div>
-        <div className="flex justify-between text-sm text-black">
-          <span>Product Subtotal</span>
-          <span>₱{totals.subtotal.toLocaleString()}</span>
-        </div>
-        <div className="flex justify-between text-sm text-black">
-          <span>Add-ons</span>
-          <span>₱{totals.addons.toLocaleString()}</span>
-        </div>
-        <div className="flex justify-between text-sm text-black">
-          <span>Discount</span>
-          <span className="text-green-700">-₱{Number(totals.discount || 0).toLocaleString()}</span>
-        </div>
-        <div className="flex justify-between text-sm text-black">
-          <span>Reservation Fee</span>
-          <span>₱{totals.reservationFee.toLocaleString()}</span>
-        </div>
-        <hr className="my-2" />
-        <div className="text-base text-black font-semibold flex justify-between">
-          <span>Total</span>
-          <span>₱{totals.total.toLocaleString()}</span>
-        </div>
-        <button
-          onClick={proceedCheckout}
-          disabled={processing || !selectedItems.length}
-          className="w-full mt-4 bg-[#8B1C1C] text-white rounded px-4 py-2 disabled:opacity-50"
-        >
-          {processing ? 'Processing…' : 'Pay Now'}
-        </button>
-
-        <div className="mt-4">
-          <div className="text-black font-semibold mb-2 text-sm">Voucher / Discount</div>
-          <div className="flex items-center gap-2">
-            <input
-              value={voucher}
-              onChange={event => setVoucher(event.target.value)}
-              placeholder="Enter voucher code"
-              className="flex-1 border rounded px-3 py-2 text-black"
-            />
-            <button
-              onClick={applyVoucher}
-              disabled={applying || !selectedItems.length}
-              className="px-4 py-2 bg-[#8B1C1C] text-white rounded disabled:opacity-50"
-            >
-              {applying ? 'Applying…' : 'Apply'}
-            </button>
-          </div>
-          {voucherInfo && (
-            <div className="mt-2 text-sm text-green-700">
-              Applied {voucherInfo.code} ({voucherInfo.type === 'percent' ? `${voucherInfo.value}%` : `₱${voucherInfo.value.toLocaleString()}`})
+        {/* Right side - Sticky Payment Details */}
+        <div className="w-96">
+          <div className="sticky top-6 bg-white border rounded-lg shadow-lg p-6 space-y-4">
+            <div className="text-black font-bold text-xl border-b pb-3">Payment Summary</div>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm text-black">
+                <span>Product Subtotal</span>
+                <span>₱{totals.subtotal.toLocaleString()}</span>
+              </div>
+              
+              <div className="flex justify-between text-sm text-black">
+                <span>Color Customization</span>
+                <span>₱{totals.addons.toLocaleString()}</span>
+              </div>
+              
+              {voucherInfo && (
+                <div className="flex justify-between text-sm text-green-700 font-semibold">
+                  <span>Discount ({voucherInfo.code})</span>
+                  <span>-₱{Number(totals.discount || 0).toLocaleString()}</span>
+                </div>
+              )}
+              
+              <div className="flex justify-between text-sm text-black">
+                <span>Reservation Fee</span>
+                <span>₱{totals.reservationFee.toLocaleString()}</span>
+              </div>
+              
+              <hr className="my-3 border-gray-300" />
+              
+              <div className="flex justify-between text-lg text-black font-bold">
+                <span>Total Amount</span>
+                <span className="text-[#8B1C1C]">₱{totals.total.toLocaleString()}</span>
+              </div>
             </div>
-          )}
+
+            <button
+              onClick={proceedCheckout}
+              disabled={processing || !selectedItems.length}
+              className="w-full mt-4 bg-gradient-to-r from-[#8B1C1C] to-[#a83232] text-white rounded-lg px-4 py-3 font-semibold disabled:opacity-50 hover:from-[#7a1919] hover:to-[#8B1C1C] transition-all transform hover:scale-[1.02] shadow-lg"
+            >
+              {processing ? 'Processing…' : 'Pay Now'}
+            </button>
+
+            <div className="mt-6 pt-4 border-t">
+              <div className="text-black font-semibold mb-3 text-sm">Apply Voucher Code</div>
+              <div className="flex items-center gap-2">
+                <input
+                  value={voucher}
+                  onChange={event => setVoucher(event.target.value)}
+                  placeholder="Enter voucher code"
+                  className="flex-1 border rounded-lg px-3 py-2 text-black text-sm focus:ring-2 focus:ring-[#8B1C1C] outline-none"
+                />
+                <button
+                  onClick={applyVoucher}
+                  disabled={applying || !selectedItems.length}
+                  className="px-4 py-2 bg-[#8B1C1C] text-white rounded-lg disabled:opacity-50 hover:bg-[#7a1919] transition text-sm font-semibold"
+                >
+                  {applying ? 'Applying…' : 'Apply'}
+                </button>
+              </div>
+              {voucherInfo && (
+                <div className="mt-2 text-sm text-green-700 font-medium">
+                  ✓ Applied {voucherInfo.code} ({voucherInfo.type === 'percent' ? `${voucherInfo.value}%` : `₱${voucherInfo.value.toLocaleString()}`} off)
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

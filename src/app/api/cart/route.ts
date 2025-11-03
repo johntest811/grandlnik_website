@@ -14,10 +14,9 @@ export async function GET(request: NextRequest) {
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
 
     const { data, error } = await supabase
-      .from('user_items')
+      .from('cart')
       .select('*')
       .eq('user_id', userId)
-      .eq('item_type', 'cart')
       .order('created_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -29,7 +28,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, productId, quantity = 1, meta = {}, delivery_address_id = null, branch = null } = await request.json();
+    const { userId, productId, quantity = 1, meta = {} } = await request.json();
     if (!userId || !productId) {
       return NextResponse.json({ error: 'Missing userId or productId' }, { status: 400 });
     }
@@ -44,25 +43,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    const productPrice = Number(product.price || 0);
-
+    // Check if item already in cart
     const { data: existing } = await supabase
-      .from('user_items')
-      .select('id, quantity, meta, delivery_address_id')
+      .from('cart')
+      .select('id, quantity, meta')
       .eq('user_id', userId)
-      .eq('item_type', 'cart')
       .eq('product_id', productId)
       .maybeSingle();
 
     if (existing) {
+      // Update existing cart item
       const nextQty = Math.max(1, Number(existing.quantity || 0) + Number(quantity || 0));
       const { data, error } = await supabase
-        .from('user_items')
+        .from('cart')
         .update({
           quantity: nextQty,
-          meta: { ...(existing.meta || {}), ...(meta || {}), branch: branch || existing.meta?.branch },
-          price: productPrice,
-          delivery_address_id: delivery_address_id || (existing as any).delivery_address_id,
+          meta: { ...(existing.meta || {}), ...(meta || {}) },
           updated_at: new Date().toISOString()
         })
         .eq('id', existing.id)
@@ -73,17 +69,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ item: data, merged: true });
     }
 
+    // Insert new cart item
     const { data, error } = await supabase
-      .from('user_items')
+      .from('cart')
       .insert([{
         user_id: userId,
         product_id: productId,
-        item_type: 'cart',
-        status: 'active',
         quantity: Math.max(1, Number(quantity || 1)),
-        meta: { ...(meta || {}), branch },
-        price: productPrice,
-        delivery_address_id,
+        meta: meta || {},
         created_at: new Date().toISOString()
       }])
       .select()
@@ -106,10 +99,9 @@ export async function PATCH(request: NextRequest) {
     if (meta) payload.meta = meta;
 
     const { data, error } = await supabase
-      .from('user_items')
+      .from('cart')
       .update(payload)
       .eq('id', id)
-      .eq('item_type', 'cart')
       .select()
       .single();
 
@@ -128,11 +120,10 @@ export async function DELETE(request: NextRequest) {
     const clear = searchParams.get('clear');
 
     if (clear === 'true' && userId) {
-      const { error } = await supabase
-        .from('user_items')
+      const { error} = await supabase
+        .from('cart')
         .delete()
-        .eq('user_id', userId)
-        .eq('item_type', 'cart');
+        .eq('user_id', userId);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true, cleared: true });
     }
@@ -140,10 +131,9 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
     const { error } = await supabase
-      .from('user_items')
+      .from('cart')
       .delete()
-      .eq('id', id)
-      .eq('item_type', 'cart');
+      .eq('id', id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ success: true });

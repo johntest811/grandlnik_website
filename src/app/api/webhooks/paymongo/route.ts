@@ -88,8 +88,8 @@ export async function POST(request: NextRequest) {
 
         // Prepare update data
         const updateData: any = {
-          status: 'reserved',
-          order_status: 'reserved',
+          status: 'pending_payment',
+          order_status: 'pending_payment',
           order_progress: 'payment_completed',
           price: Number(userItem.price || 0),
           payment_status: 'completed',
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         };
 
-        // If it's a cart item, also convert it to reservation
+        // If it's a cart item, convert it to reservation
         if (isCartItem) {
           updateData.item_type = 'reservation';
         }
@@ -131,7 +131,32 @@ export async function POST(request: NextRequest) {
           console.error(`❌ Failed to update item ${id}:`, updateErr);
         } else {
           const action = isCartItem ? 'Converted cart item' : 'Updated reservation';
-          console.log(`✅ ${action} ${id} to reserved status`);
+          console.log(`✅ ${action} ${id} to pending_payment status`);
+
+          // Deduct inventory from products table
+          try {
+            const { data: product, error: productErr } = await supabase
+              .from('products')
+              .select('inventory')
+              .eq('id', userItem.product_id)
+              .single();
+
+            if (product && !productErr) {
+              const newInventory = Math.max(0, product.inventory - userItem.quantity);
+              const { error: inventoryErr } = await supabase
+                .from('products')
+                .update({ inventory: newInventory })
+                .eq('id', userItem.product_id);
+
+              if (inventoryErr) {
+                console.error(`❌ Failed to deduct inventory for product ${userItem.product_id}:`, inventoryErr);
+              } else {
+                console.log(`✅ Deducted ${userItem.quantity} from product ${userItem.product_id} inventory (${product.inventory} → ${newInventory})`);
+              }
+            }
+          } catch (invErr) {
+            console.error(`❌ Inventory deduction error for product ${userItem.product_id}:`, invErr);
+          }
         }
 
         notifiedItems.push({
@@ -143,19 +168,34 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Clear cart items for this user (items with item_type='cart')
+      // Clear cart table for items that came from cart (check metadata)
       if (cartUserId) {
         try {
-          const { error: clearErr } = await supabase
-            .from('user_items')
-            .delete()
-            .eq('user_id', cartUserId)
-            .eq('item_type', 'cart');
-          
-          if (clearErr) {
-            console.warn('⚠️ Failed to clear cart:', clearErr.message);
-          } else {
-            console.log('✅ Cart cleared for user:', cartUserId);
+          // Delete cart items associated with the paid user_items
+          const cartIdsToDelete: string[] = [];
+          for (const id of ids) {
+            const { data: userItem } = await supabase
+              .from('user_items')
+              .select('meta')
+              .eq('id', id)
+              .single();
+            
+            if (userItem?.meta?.cart_id) {
+              cartIdsToDelete.push(userItem.meta.cart_id);
+            }
+          }
+
+          if (cartIdsToDelete.length > 0) {
+            const { error: clearErr } = await supabase
+              .from('cart')
+              .delete()
+              .in('id', cartIdsToDelete);
+            
+            if (clearErr) {
+              console.warn('⚠️ Failed to clear cart:', clearErr.message);
+            } else {
+              console.log('✅ Cart items deleted:', cartIdsToDelete.length);
+            }
           }
         } catch (e) {
           console.warn('⚠️ Cart clear error:', e);

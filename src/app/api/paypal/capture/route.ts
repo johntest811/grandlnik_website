@@ -92,7 +92,8 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('user_items')
           .update({ 
-            status: 'reserved',
+            status: 'pending_payment',
+            order_status: 'pending_payment',
             payment_status: 'completed',
             payment_id: orderId,
             total_paid: totalAmount,

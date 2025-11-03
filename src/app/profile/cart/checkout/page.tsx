@@ -1,0 +1,492 @@
+"use client";
+
+import { Suspense, useEffect, useState, useMemo } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { useSearchParams, useRouter } from "next/navigation";
+import { FaArrowLeft, FaShoppingCart } from "react-icons/fa";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+type UserItem = {
+  id: string;
+  product_id: string;
+  quantity: number;
+  meta: any;
+  price?: number;
+};
+
+type Product = {
+  id: string;
+  name?: string;
+  price?: number;
+  images?: string[];
+  image1?: string;
+  inventory?: number;
+};
+
+type Address = {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  phone?: string;
+  address?: string;
+  is_default: boolean;
+};
+
+type VoucherInfo = { code: string; type: "percent" | "amount"; value: number };
+
+function CartCheckoutContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const itemIdsParam = searchParams.get("items");
+
+  const [userId, setUserId] = useState<string | null>(null);
+  const [items, setItems] = useState<UserItem[]>([]);
+  const [products, setProducts] = useState<Record<string, Product>>({});
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [selectedBranch, setSelectedBranch] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  
+  const [voucherCode, setVoucherCode] = useState("");
+  const [voucherInfo, setVoucherInfo] = useState<VoucherInfo | null>(null);
+  const [applyingVoucher, setApplyingVoucher] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"paymongo" | "paypal">("paymongo");
+
+  const branches = [
+    "BALINTAWAK BRANCH",
+    "STA. ROSA BRANCH",
+    "UGONG BRANCH",
+    "ALABANG SHOWROOM",
+    "IMUS BRANCH",
+    "PAMPANGA SHOWROOM",
+    "HIHOME BRANCH",
+    "MC HOME DEPO ORTIGAS",
+    "SAN JUAN CITY",
+    "CW COMMONWEALTH",
+    "MC HOME DEPO BGC",
+  ];
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData?.user) {
+          router.push("/login");
+          return;
+        }
+        const uid = userData.user.id;
+        setUserId(uid);
+
+        // Parse item IDs from query string
+        const itemIds = itemIdsParam ? itemIdsParam.split(",") : [];
+        if (itemIds.length === 0) {
+          alert("No items selected");
+          router.push("/profile/cart");
+          return;
+        }
+
+        // Load cart items from cart table
+        const { data: cartData, error: cartError } = await supabase
+          .from("cart")
+          .select("*")
+          .eq("user_id", uid)
+          .in("id", itemIds);
+
+        if (cartError) throw cartError;
+        setItems(cartData as any || []);
+
+        // Load products
+        const productIds = Array.from(new Set(cartData?.map((item: any) => item.product_id) || []));
+        if (productIds.length > 0) {
+          const { data: prodData } = await supabase
+            .from("products")
+            .select("id, name, price, images, image1, inventory")
+            .in("id", productIds);
+
+          const map: Record<string, Product> = {};
+          (prodData || []).forEach((p: any) => {
+            map[p.id] = p;
+          });
+          setProducts(map);
+        }
+
+        // Load addresses
+        const { data: addressData } = await supabase
+          .from("addresses")
+          .select("*")
+          .eq("user_id", uid)
+          .order("is_default", { ascending: false });
+
+        if (addressData) {
+          setAddresses(addressData as any);
+          const def = addressData.find((a: any) => a.is_default);
+          if (def) setSelectedAddressId(def.id);
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Error loading checkout data");
+        router.push("/profile/cart");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [itemIdsParam, router]);
+
+  const totals = useMemo(() => {
+    const base = items.reduce(
+      (acc, item) => {
+        const product = products[item.product_id];
+        const unitPrice = Number(item.price ?? product?.price ?? 0);
+        const quantity = Number(item.quantity || 1);
+        const addons = Array.isArray(item.meta?.addons)
+          ? item.meta.addons.reduce((sum: number, addon: any) => sum + Number(addon?.fee || 0), 0)
+          : 0;
+        const baseLine = unitPrice * quantity;
+        const addonLine = addons * quantity;
+        acc.subtotal += baseLine;
+        acc.addons += addonLine;
+        return acc;
+      },
+      { subtotal: 0, addons: 0 }
+    );
+    let preDiscount = base.subtotal + base.addons;
+    let discount = 0;
+    if (voucherInfo) {
+      discount = voucherInfo.type === 'percent'
+        ? preDiscount * (voucherInfo.value / 100)
+        : voucherInfo.value;
+      discount = Math.min(discount, preDiscount);
+    }
+    const reservationFee = items.length > 0 ? 500 : 0;
+    const total = Math.max(0, preDiscount - discount + reservationFee);
+    return { ...base, discount, reservationFee, total };
+  }, [items, products, voucherInfo]);
+
+  const applyVoucher = async () => {
+    if (items.length === 0) return alert("No items to apply voucher");
+    setApplyingVoucher(true);
+    try {
+      const preDiscount = totals.subtotal + totals.addons;
+      const res = await fetch("/api/discount-codes/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: voucherCode.trim(), subtotal: preDiscount })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Invalid code");
+      setVoucherInfo(data.discount);
+      alert("Voucher applied successfully!");
+    } catch (error: any) {
+      alert(error.message);
+      setVoucherInfo(null);
+    } finally {
+      setApplyingVoucher(false);
+    }
+  };
+
+  const handleCheckout = async () => {
+    if (!userId) {
+      alert("Please sign in");
+      return;
+    }
+    if (!selectedAddressId) {
+      alert("Please select a delivery address");
+      return;
+    }
+    if (!selectedBranch) {
+      alert("Please select a pickup branch");
+      return;
+    }
+    if (items.length === 0) {
+      alert("No items to checkout");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Create payment session with cart items
+      // Pass metadata about address and branch
+      const res = await fetch("/api/create-payment-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cart_ids: items.map(item => item.id),
+          user_id: userId,
+          payment_method: paymentMethod,
+          payment_type: "reservation",
+          delivery_address_id: selectedAddressId,
+          branch: selectedBranch,
+          success_url: `${window.location.origin}/profile/cart/success?source=cart`,
+          cancel_url: `${window.location.origin}/profile/cart/checkout?items=${itemIdsParam}`,
+          voucher: voucherInfo || undefined
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.checkoutUrl) {
+        throw new Error(json.error || "Checkout failed");
+      }
+
+      // Redirect to payment
+      window.location.href = json.checkoutUrl;
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      alert(error.message || "Checkout failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#8B1C1C] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading checkout...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4">
+        {/* Header */}
+        <div className="mb-6">
+          <button
+            onClick={() => router.push("/profile/cart")}
+            className="flex items-center gap-2 text-[#8B1C1C] hover:underline"
+          >
+            <FaArrowLeft /> Back to Cart
+          </button>
+          <h1 className="text-3xl font-bold text-gray-900 mt-4 flex items-center gap-3">
+            <FaShoppingCart className="text-[#8B1C1C]" />
+            Checkout
+          </h1>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Forms */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Reservation Details */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4 border-b pb-3">
+                Reservation Details
+              </h2>
+
+              {/* Delivery Address */}
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Delivery Address <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={selectedAddressId}
+                  onChange={(e) => setSelectedAddressId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:ring-2 focus:ring-[#8B1C1C] focus:border-transparent"
+                  required
+                >
+                  <option value="">Select Address</option>
+                  {addresses.map((addr) => (
+                    <option key={addr.id} value={addr.id}>
+                      {addr.full_name} - {addr.address} {addr.phone && `(${addr.phone})`}
+                      {addr.is_default && " (Default)"}
+                    </option>
+                  ))}
+                </select>
+                {addresses.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    No addresses found.{" "}
+                    <a href="/profile/address" className="text-[#8B1C1C] hover:underline">
+                      Add an address
+                    </a>
+                  </p>
+                )}
+              </div>
+
+              {/* Pickup Branch */}
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Pickup Branch <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:ring-2 focus:ring-[#8B1C1C] focus:border-transparent"
+                  required
+                >
+                  <option value="">Select Branch</option>
+                  {branches.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Payment Method */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4 border-b pb-3">
+                Payment Method
+              </h2>
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-[#8B1C1C] transition">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    checked={paymentMethod === "paymongo"}
+                    onChange={() => setPaymentMethod("paymongo")}
+                    className="w-4 h-4 text-[#8B1C1C]"
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900">PayMongo</div>
+                    <div className="text-sm text-gray-500">GCash, Maya, Credit/Debit Card</div>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-[#8B1C1C] transition">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    checked={paymentMethod === "paypal"}
+                    onChange={() => setPaymentMethod("paypal")}
+                    className="w-4 h-4 text-[#8B1C1C]"
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900">PayPal</div>
+                    <div className="text-sm text-gray-500">Pay with PayPal account</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Apply Voucher */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4 border-b pb-3">
+                Discount Code
+              </h2>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={voucherCode}
+                  onChange={(e) => setVoucherCode(e.target.value)}
+                  placeholder="Enter voucher code"
+                  className="flex-1 border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:ring-2 focus:ring-[#8B1C1C] focus:border-transparent"
+                />
+                <button
+                  onClick={applyVoucher}
+                  disabled={applyingVoucher || !voucherCode.trim()}
+                  className="px-6 py-3 bg-[#8B1C1C] text-white rounded-lg font-semibold hover:bg-[#7a1919] disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  {applyingVoucher ? "Applying..." : "Apply"}
+                </button>
+              </div>
+              {voucherInfo && (
+                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm font-medium">
+                  ✓ Voucher "{voucherInfo.code}" applied ({voucherInfo.type === 'percent' ? `${voucherInfo.value}%` : `₱${voucherInfo.value.toLocaleString()}`} off)
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column - Summary */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-6 bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4 border-b pb-3">
+                Reservation Summary
+              </h2>
+
+              {/* Items List */}
+              <div className="mb-4 space-y-3 max-h-64 overflow-y-auto">
+                {items.map((item) => {
+                  const product = products[item.product_id];
+                  const image = (product?.images && product.images[0]) || product?.image1 || "/no-orders.png";
+                  const qty = item.quantity || 1;
+                  const unitPrice = Number(item.price ?? product?.price ?? 0);
+                  const addons = Array.isArray(item.meta?.addons)
+                    ? item.meta.addons.reduce((sum: number, addon: any) => sum + Number(addon?.fee || 0), 0)
+                    : 0;
+                  const lineTotal = (unitPrice + addons) * qty;
+
+                  return (
+                    <div key={item.id} className="flex gap-3 pb-3 border-b">
+                      <img src={image} alt={product?.name || "Product"} className="w-16 h-16 object-cover rounded" />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900 text-sm">{product?.name || "Product"}</div>
+                        <div className="text-xs text-gray-500">Qty: {qty}</div>
+                        <div className="text-sm font-semibold text-gray-900">₱{lineTotal.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Totals */}
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm text-gray-700">
+                  <span>Product Subtotal</span>
+                  <span>₱{totals.subtotal.toLocaleString()}</span>
+                </div>
+                {totals.addons > 0 && (
+                  <div className="flex justify-between text-sm text-gray-700">
+                    <span>Color Customization</span>
+                    <span>₱{totals.addons.toLocaleString()}</span>
+                  </div>
+                )}
+                {voucherInfo && totals.discount > 0 && (
+                  <div className="flex justify-between text-sm text-green-600 font-semibold">
+                    <span>Discount</span>
+                    <span>-₱{totals.discount.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm text-gray-700">
+                  <span>Reservation Fee</span>
+                  <span>₱{totals.reservationFee.toLocaleString()}</span>
+                </div>
+                <hr className="my-3" />
+                <div className="flex justify-between text-lg font-bold text-gray-900">
+                  <span>Total Amount</span>
+                  <span className="text-[#8B1C1C]">₱{totals.total.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Checkout Button */}
+              <button
+                onClick={handleCheckout}
+                disabled={submitting || !selectedAddressId || !selectedBranch || items.length === 0}
+                className="w-full bg-gradient-to-r from-[#8B1C1C] to-[#a83232] text-white rounded-lg px-6 py-4 font-bold text-lg hover:from-[#7a1919] hover:to-[#8B1C1C] disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] shadow-lg"
+              >
+                {submitting ? "Processing..." : `Pay ₱${totals.total.toLocaleString()}`}
+              </button>
+
+              <p className="text-xs text-gray-500 text-center mt-4">
+                By proceeding, you agree to our terms and conditions
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function CartCheckoutPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#8B1C1C] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <CartCheckoutContent />
+    </Suspense>
+  );
+}

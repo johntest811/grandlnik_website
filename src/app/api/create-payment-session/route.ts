@@ -192,32 +192,96 @@ export async function POST(request: NextRequest) {
   try {
     const {
       user_item_ids,
+      cart_ids,
+      user_id,
       payment_method = 'paymongo',
       payment_type = 'reservation',
       success_url,
       cancel_url,
       voucher,
+      delivery_address_id,
+      branch,
     } = await request.json();
 
-    const ids: string[] = Array.isArray(user_item_ids) ? user_item_ids : [];
-
-    if (ids.length === 0 || !success_url || !cancel_url) {
+    if (!success_url || !cancel_url) {
       return NextResponse.json({ error: 'Missing required data' }, { status: 400 });
     }
 
-    const { data: rows, error: itemsErr } = await supabase
-      .from('user_items')
-      .select('id, quantity, meta, product_id, item_type')
-      .in('id', ids);
+    let rows: any[] = [];
+    let createdUserItemIds: string[] = [];
 
-    if (itemsErr || !rows || rows.length === 0) {
-      return NextResponse.json({ error: 'Items not found' }, { status: 404 });
-    }
+    // Handle cart checkout (new flow)
+    if (cart_ids && Array.isArray(cart_ids) && cart_ids.length > 0) {
+      if (!user_id) {
+        return NextResponse.json({ error: 'user_id required for cart checkout' }, { status: 400 });
+      }
 
-    // Validate that all items are either cart or reservation items
-    const validTypes = rows.every(r => r.item_type === 'cart' || r.item_type === 'reservation');
-    if (!validTypes) {
-      return NextResponse.json({ error: 'Invalid item types for payment' }, { status: 400 });
+      // Load cart items
+      const { data: cartItems, error: cartErr } = await supabase
+        .from('cart')
+        .select('id, product_id, quantity, meta')
+        .eq('user_id', user_id)
+        .in('id', cart_ids);
+
+      if (cartErr || !cartItems || cartItems.length === 0) {
+        return NextResponse.json({ error: 'Cart items not found' }, { status: 404 });
+      }
+
+      // Create user_items from cart
+      const nowIso = new Date().toISOString();
+      const userItemsToInsert = cartItems.map((cartItem: any) => ({
+        user_id,
+        product_id: cartItem.product_id,
+        item_type: 'reservation',
+        status: 'pending_payment',
+        order_status: 'pending_payment',
+        order_progress: 'awaiting_payment',
+        quantity: cartItem.quantity,
+        meta: {
+          ...(cartItem.meta || {}),
+          branch,
+          from_cart: true,
+          cart_id: cartItem.id,
+        },
+        delivery_address_id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      }));
+
+      const { data: created, error: insertErr } = await supabase
+        .from('user_items')
+        .insert(userItemsToInsert)
+        .select('id, quantity, meta, product_id');
+
+      if (insertErr || !created) {
+        console.error('Failed to create user_items from cart:', insertErr);
+        return NextResponse.json({ error: 'Failed to create reservation items' }, { status: 500 });
+      }
+
+      rows = created;
+      createdUserItemIds = created.map((r: any) => r.id);
+
+    } else if (user_item_ids && Array.isArray(user_item_ids) && user_item_ids.length > 0) {
+      // Handle direct reservation (existing flow)
+      const { data: existingItems, error: itemsErr } = await supabase
+        .from('user_items')
+        .select('id, quantity, meta, product_id, item_type')
+        .in('id', user_item_ids);
+
+      if (itemsErr || !existingItems || existingItems.length === 0) {
+        return NextResponse.json({ error: 'Items not found' }, { status: 404 });
+      }
+
+      // Validate that all items are reservations
+      const validTypes = existingItems.every(r => r.item_type === 'reservation');
+      if (!validTypes) {
+        return NextResponse.json({ error: 'Invalid item types for payment' }, { status: 400 });
+      }
+
+      rows = existingItems;
+      createdUserItemIds = user_item_ids;
+    } else {
+      return NextResponse.json({ error: 'Either cart_ids or user_item_ids required' }, { status: 400 });
     }
 
     const productIds = Array.from(new Set(rows.map((r) => r.product_id)));
@@ -455,7 +519,8 @@ export async function POST(request: NextRequest) {
     }));
 
     const baseMetadata = {
-      user_item_ids: ids.join(','),
+      user_item_ids: createdUserItemIds.join(','),
+      cart_ids: cart_ids ? cart_ids.join(',') : undefined,
       subtotal,
       addons_total: addonsTotal,
       discount_code: voucher?.code || null,
@@ -474,7 +539,7 @@ export async function POST(request: NextRequest) {
     if (payment_method === 'paypal') {
       const res = await createPayPalOrder({
         amount: totalAmount,
-        user_item_ids: ids,
+        user_item_ids: createdUserItemIds,
         success_url,
         cancel_url,
         items: payPalItems,
@@ -485,7 +550,7 @@ export async function POST(request: NextRequest) {
       const res = await createPayMongoSession({
         amount: totalAmount,
         currency: 'PHP',
-        user_item_ids: ids,
+        user_item_ids: createdUserItemIds,
         success_url,
         cancel_url,
         payment_type,
