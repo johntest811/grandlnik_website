@@ -485,6 +485,8 @@ export async function POST(request: NextRequest) {
         .from('user_items')
         .update({
           price: Number(product?.price || 0),
+          // Prefill per-item final total so UI can reflect the PayMongo/PayPal amount immediately
+          total_amount: metaInfo.finalTotal,
           meta: {
             ...(r.meta || {}),
             product_name: product?.name || 'Product',

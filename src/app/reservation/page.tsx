@@ -176,7 +176,8 @@ function ReservationPageContent() {
               key: "color_customization",
               label: "Color Customization",
               fee: 2500,
-              value: formData.colorText || "Custom color",
+              // Do not prefill text; leave empty until user types
+              value: formData.colorText || "",
             },
           ]
         : [];
@@ -227,7 +228,7 @@ function ReservationPageContent() {
               key: "color_customization",
               label: "Color Customization",
               fee: 2500,
-              value: formData.colorText || "Custom color",
+              value: formData.colorText || "",
             },
           ]
         : [];

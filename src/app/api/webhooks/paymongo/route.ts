@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         if (!cartUserId) cartUserId = userItem.user_id;
 
         const itemMeta = userItem.meta || {};
-        const lineAfterDiscount = Number(itemMeta.line_total_after_discount ?? itemMeta.line_total ?? 0);
+  const lineAfterDiscount = Number(itemMeta.line_total_after_discount ?? itemMeta.line_total ?? 0);
         const addonsPerItem = Number(itemMeta.addons_total_per_item ?? itemMeta.addons_total ?? 0);
         const storedShare = Number(itemMeta.reservation_fee_share ?? 0);
         const fallbackShare = ids.length > 0 ? reservationFee / ids.length : reservationFee;
@@ -95,14 +95,17 @@ export async function POST(request: NextRequest) {
           payment_status: 'completed',
           payment_id: sessionId,
           total_paid: finalTotalPerItem,
-          total_amount: lineAfterDiscount,
+          // Persist the final total (after discount + addons + reservation share)
+          total_amount: finalTotalPerItem,
           reservation_fee: reservationFee,
           payment_method: 'paymongo',
           meta: {
             ...itemMeta,
             payment_confirmed_at: new Date().toISOString(),
             amount_paid: finalTotalPerItem,
-            total_amount: lineAfterDiscount,
+            // Store both the net product line and the final total for transparency
+            net_line_after_discount: lineAfterDiscount,
+            total_amount: finalTotalPerItem,
             payment_session_id: sessionId,
             payment_method: 'paymongo',
             subtotal,
@@ -133,8 +136,11 @@ export async function POST(request: NextRequest) {
           const action = isCartItem ? 'Converted cart item' : 'Updated reservation';
           console.log(`✅ ${action} ${id} to pending_payment status`);
 
-          // Deduct inventory from products table
+          // Deduct inventory from products table (idempotent: only once per item)
           try {
+            if (itemMeta?.inventory_deducted) {
+              console.log(`ℹ️ Inventory already deducted for item ${id}, skipping.`);
+            } else {
             const { data: product, error: productErr } = await supabase
               .from('products')
               .select('inventory')
@@ -152,7 +158,19 @@ export async function POST(request: NextRequest) {
                 console.error(`❌ Failed to deduct inventory for product ${userItem.product_id}:`, inventoryErr);
               } else {
                 console.log(`✅ Deducted ${userItem.quantity} from product ${userItem.product_id} inventory (${product.inventory} → ${newInventory})`);
+                // Mark item meta to avoid double deduction in retries
+                const nextMeta = {
+                  ...itemMeta,
+                  inventory_deducted: true,
+                  product_stock_before: product.inventory,
+                  product_stock_after: newInventory,
+                };
+                await supabase
+                  .from('user_items')
+                  .update({ meta: nextMeta })
+                  .eq('id', id);
               }
+            }
             }
           } catch (invErr) {
             console.error(`❌ Inventory deduction error for product ${userItem.product_id}:`, invErr);

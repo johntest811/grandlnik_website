@@ -138,7 +138,8 @@ export async function POST(request: NextRequest) {
           payment_id: orderId,
           price: Number((userItem as any).price || 0),
           total_paid: finalTotalPerItem,
-          total_amount: lineAfterDiscount,
+          // Persist the final total (after discount + addons + reservation share)
+          total_amount: finalTotalPerItem,
           payment_method: 'paypal',
           meta: {
             ...itemMeta,
@@ -148,7 +149,9 @@ export async function POST(request: NextRequest) {
             subtotal,
             addons_total: addonsTotal,
             discount_value: discountValue,
-            total_amount: lineAfterDiscount,
+            // Store both the net product line and the final total for transparency
+            net_line_after_discount: lineAfterDiscount,
+            total_amount: finalTotalPerItem,
             reservation_fee: reservationFee,
             reservation_fee_share: reservationShare,
             addons_total_per_item: addonsPerItem,
@@ -174,25 +177,40 @@ export async function POST(request: NextRequest) {
           const action = isCartItem ? 'Converted cart item' : 'Updated reservation';
           console.log(`✅ ${action} ${id} to pending_payment status`);
 
-          // Deduct inventory from products table
+          // Deduct inventory from products table (idempotent: only once per item)
           try {
-            const { data: product, error: productErr } = await supabase
-              .from('products')
-              .select('inventory')
-              .eq('id', userItem.product_id)
-              .single();
-
-            if (product && !productErr) {
-              const newInventory = Math.max(0, product.inventory - userItem.quantity);
-              const { error: inventoryErr } = await supabase
+            if (itemMeta?.inventory_deducted) {
+              console.log(`ℹ️ Inventory already deducted for item ${id}, skipping.`);
+            } else {
+              const { data: product, error: productErr } = await supabase
                 .from('products')
-                .update({ inventory: newInventory })
-                .eq('id', userItem.product_id);
+                .select('inventory')
+                .eq('id', userItem.product_id)
+                .single();
 
-              if (inventoryErr) {
-                console.error(`❌ Failed to deduct inventory for product ${userItem.product_id}:`, inventoryErr);
-              } else {
-                console.log(`✅ Deducted ${userItem.quantity} from product ${userItem.product_id} inventory (${product.inventory} → ${newInventory})`);
+              if (product && !productErr) {
+                const newInventory = Math.max(0, product.inventory - userItem.quantity);
+                const { error: inventoryErr } = await supabase
+                  .from('products')
+                  .update({ inventory: newInventory })
+                  .eq('id', userItem.product_id);
+
+                if (inventoryErr) {
+                  console.error(`❌ Failed to deduct inventory for product ${userItem.product_id}:`, inventoryErr);
+                } else {
+                  console.log(`✅ Deducted ${userItem.quantity} from product ${userItem.product_id} inventory (${product.inventory} → ${newInventory})`);
+                  // Mark item meta to avoid double deduction in retries
+                  const nextMeta = {
+                    ...itemMeta,
+                    inventory_deducted: true,
+                    product_stock_before: product.inventory,
+                    product_stock_after: newInventory,
+                  };
+                  await supabase
+                    .from('user_items')
+                    .update({ meta: nextMeta })
+                    .eq('id', id);
+                }
               }
             }
           } catch (invErr) {

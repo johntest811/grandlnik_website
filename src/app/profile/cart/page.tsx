@@ -250,7 +250,8 @@ export default function CartPage() {
             const idx = next.findIndex((a: any) => a?.key === 'color_customization');
             if (checked) {
               if (idx === -1) {
-                next.push({ key: 'color_customization', label: 'Color Customization', fee: 2500, value: colorValue || 'Custom color' });
+                // Do not pre-fill any text; leave value empty until the user types
+                next.push({ key: 'color_customization', label: 'Color Customization', fee: 2500, value: colorValue || '' });
               }
             } else {
               if (idx !== -1) next.splice(idx, 1);
@@ -262,7 +263,8 @@ export default function CartPage() {
             const next = [...addonsArr];
             const idx = next.findIndex((a: any) => a?.key === 'color_customization');
             if (idx !== -1) {
-              next[idx] = { ...next[idx], value: val || 'Custom color' };
+              // Keep empty string if user clears the field
+              next[idx] = { ...next[idx], value: val || '' };
               await updateItemMeta(next);
             }
           };

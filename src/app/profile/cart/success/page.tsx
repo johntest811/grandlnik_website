@@ -100,6 +100,25 @@ function CartSuccessPageContent() {
     loadOrderDetails();
   }, [router]);
 
+  // Fallback cleanup to ensure any cart rows tied to these reservations are removed
+  useEffect(() => {
+    const cleanup = async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = (userData as any)?.user?.id;
+        if (!uid) return;
+        await fetch('/api/cart/cleanup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: uid, minutes: 180 })
+        });
+      } catch (e) {
+        console.warn('cart cleanup skipped', e);
+      }
+    };
+    if (!loading) cleanup();
+  }, [loading]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -113,35 +132,43 @@ function CartSuccessPageContent() {
 
   // Calculate totals
   const calculateTotals = () => {
+    // Prefer server-computed totals to avoid double-counting (esp. reservation fee)
     let subtotal = 0;
     let addonsTotal = 0;
     let discount = 0;
     let reservationFee = 0;
+    let grandTotal = 0;
 
-    orderItems.forEach(item => {
+    orderItems.forEach((item) => {
       const meta = item.meta || {};
-      const itemSubtotal = Number(item.price || 0) * Number(item.quantity || 1);
-      const itemAddons = Array.isArray(meta.addons)
-        ? meta.addons.reduce((sum: number, addon: any) => sum + Number(addon?.fee || 0), 0) * Number(item.quantity || 1)
+      const qty = Number(item.quantity || 1);
+      const unit = Number(meta.product_price ?? item.price ?? 0);
+      const addonsPerUnit = Array.isArray(meta.addons)
+        ? meta.addons.reduce((sum: number, a: any) => sum + Number(a?.fee || 0), 0)
         : 0;
 
-      subtotal += itemSubtotal;
-      addonsTotal += itemAddons;
-      
-      // Get discount from first item (should be same for all)
-      if (discount === 0 && meta.discount_value) {
-        discount = Number(meta.discount_value);
+      subtotal += unit * qty;
+      addonsTotal += addonsPerUnit * qty;
+
+      // Use server-provided per-line final total when available
+      const finalPerLine = Number(
+        item.total_amount ?? meta.final_total_per_item ?? 0
+      );
+      if (finalPerLine > 0) grandTotal += finalPerLine; else {
+        const lineAfterDiscount = Number(meta.line_total_after_discount ?? (unit + addonsPerUnit) * qty);
+        const share = Number(meta.reservation_fee_share ?? 0);
+        grandTotal += Math.max(0, lineAfterDiscount + share);
       }
-      
-      // Get reservation fee from first item
-      if (reservationFee === 0 && (meta.reservation_fee || item.meta?.reservation_fee_share)) {
-        reservationFee = 500; // Standard fee
+
+      if (discount === 0 && typeof meta.discount_value !== 'undefined') {
+        discount = Number(meta.discount_value || 0);
+      }
+      if (reservationFee === 0 && (meta.reservation_fee || meta.reservation_fee_share)) {
+        reservationFee = Number(meta.reservation_fee || 500);
       }
     });
 
-    const total = subtotal + addonsTotal - discount + reservationFee;
-    
-    return { subtotal, addonsTotal, discount, reservationFee, total };
+    return { subtotal, addonsTotal, discount, reservationFee, total: grandTotal };
   };
 
   const totals = calculateTotals();

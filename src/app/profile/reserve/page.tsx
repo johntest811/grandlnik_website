@@ -268,20 +268,24 @@ function ProfileReservePageContent() {
 
   // Helper to safely get unit price or total amount
   const getItemTotalPrice = (it: UserItem, prod?: Product) => {
-    // If payment completed, show total_amount (includes product, addons, reservation fee, minus discounts)
-    if (it.payment_status === 'completed' && it.total_amount) {
+    // Prefer server-computed totals to match gateway amounts exactly
+    const meta = it.meta || {};
+    if (typeof meta.final_total_per_item === 'number' && meta.final_total_per_item > 0) {
+      return Number(meta.final_total_per_item);
+    }
+    if (typeof it.total_amount === 'number' && it.total_amount > 0) {
       return Number(it.total_amount);
     }
-    // Fallback to total_paid if total_amount not available
-    if (it.payment_status === 'completed' && it.total_paid) {
+    if (typeof it.total_paid === 'number' && it.total_paid > 0) {
       return Number(it.total_paid);
     }
-    // Otherwise calculate from metadata or product price
-    const unitPrice = Number(it?.meta?.product_price ?? prod?.price ?? 0);
-    const addons = Array.isArray(it.meta?.addons) 
-      ? it.meta.addons.reduce((sum: number, addon: any) => sum + Number(addon?.fee || 0), 0)
-      : 0;
-    return (unitPrice + addons) * it.quantity;
+    // Compute a best-effort fallback from meta if present
+    const qty = Number(it.quantity || 1);
+    const unit = Number(meta.product_price ?? prod?.price ?? 0);
+    const addonsPerUnit = Array.isArray(meta.addons) ? meta.addons.reduce((s: number, a: any) => s + Number(a?.fee || 0), 0) : 0;
+    const lineAfterDiscount = Number(meta.line_total_after_discount ?? (unit + addonsPerUnit) * qty);
+    const share = Number(meta.reservation_fee_share ?? 0);
+    return Math.max(0, lineAfterDiscount + share);
   };
 
   if (loading) {
