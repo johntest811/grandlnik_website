@@ -211,6 +211,8 @@ function CartCheckoutContent() {
 
     setSubmitting(true);
     try {
+      // Generate a unique receipt reference to scope items for the success page
+      const receiptRef = `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       // Create payment session with cart items
       // Pass metadata about address and branch
       const res = await fetch("/api/create-payment-session", {
@@ -223,9 +225,12 @@ function CartCheckoutContent() {
           payment_type: "reservation",
           delivery_address_id: selectedAddressId,
           branch: selectedBranch,
-          success_url: `${window.location.origin}/profile/cart/success?source=cart`,
+          // Include the receipt ref in the success URL so we can fetch only these items later
+          success_url: `${window.location.origin}/profile/cart/success?source=cart&ref=${encodeURIComponent(receiptRef)}`,
           cancel_url: `${window.location.origin}/profile/cart/checkout?items=${itemIdsParam}`,
-          voucher: voucherInfo || undefined
+          voucher: voucherInfo || undefined,
+          // Also pass the ref so the server can store it in metadata and on each user_item
+          receipt_ref: receiptRef,
         })
       });
 

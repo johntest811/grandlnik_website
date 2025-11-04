@@ -107,19 +107,33 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', userItemId);
 
-        // Deduct inventory
-        const { data: product } = await supabase
-          .from('products')
-          .select('inventory')
-          .eq('id', userItem.product_id)
-          .single();
-
-        if (product) {
-          const newInventory = Math.max(0, (product.inventory || 0) - userItem.quantity);
-          await supabase
+        // Deduct inventory unless already reserved/deducted earlier
+        const alreadyDeducted = Boolean(userItem.meta?.inventory_deducted);
+        if (!alreadyDeducted) {
+          const { data: product } = await supabase
             .from('products')
-            .update({ inventory: newInventory })
-            .eq('id', userItem.product_id);
+            .select('inventory')
+            .eq('id', userItem.product_id)
+            .single();
+
+          if (product) {
+            const newInventory = Math.max(0, (product.inventory || 0) - userItem.quantity);
+            await supabase
+              .from('products')
+              .update({ inventory: newInventory })
+              .eq('id', userItem.product_id);
+            await supabase
+              .from('user_items')
+              .update({
+                meta: {
+                  ...(userItem.meta || {}),
+                  inventory_deducted: true,
+                  product_stock_before: product.inventory,
+                  product_stock_after: newInventory,
+                },
+              })
+              .eq('id', userItemId);
+          }
         }
       }
     }

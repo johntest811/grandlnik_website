@@ -35,6 +35,7 @@ function CartSuccessPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const source = searchParams.get("source");
+  const ref = searchParams.get("ref");
   
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [products, setProducts] = useState<Record<string, Product>>({});
@@ -54,31 +55,44 @@ function CartSuccessPageContent() {
         const uid = userData.user.id;
         setUserId(uid);
 
-        // Load recent items (converted from cart, now in reservation with pending_payment status)
-        const { data: items, error: itemsError } = await supabase
-          .from("user_items")
-          .select("*")
-          .eq("user_id", uid)
-          .eq("item_type", "reservation")
-          .in("status", ["pending_payment", "reserved"])
-          .order("created_at", { ascending: false })
-          .limit(20);
+        // First try: use receipt_ref to fetch only the items from this transaction
+        let scopedItems: any[] = [];
+        if (ref) {
+          const { data: refItems, error: refErr } = await supabase
+            .from("user_items")
+            .select("*")
+            .eq("user_id", uid)
+            .eq("item_type", "reservation")
+            .contains("meta", { receipt_ref: ref });
+          if (refErr) throw refErr;
+          scopedItems = refItems || [];
+        }
 
-        if (itemsError) throw itemsError;
+        // Fallback: if no ref or nothing found (older sessions), limit by very recent from_cart items
+        if ((!ref || scopedItems.length === 0)) {
+          const { data: items, error: itemsError } = await supabase
+            .from("user_items")
+            .select("*")
+            .eq("user_id", uid)
+            .eq("item_type", "reservation")
+            .in("status", ["pending_payment", "reserved"]) // keep narrow statuses
+            .order("created_at", { ascending: false })
+            .limit(15);
+          if (itemsError) throw itemsError;
 
-        // Filter items that were just paid (within last 5 minutes) and came from cart
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        const recentItems = (items || []).filter((item: any) => {
-          const createdAt = item.created_at || item.updated_at;
-          const fromCart = item.meta?.from_cart === true;
-          return createdAt && createdAt > fiveMinutesAgo && (fromCart || source === 'cart');
-        });
+          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+          scopedItems = (items || []).filter((item: any) => {
+            const ts = item.updated_at || item.created_at;
+            const fromCart = item.meta?.from_cart === true;
+            return ts && ts > fiveMinutesAgo && (fromCart || source === 'cart');
+          });
+        }
 
-        setOrderItems(recentItems);
+        setOrderItems(scopedItems);
 
         // Load product details
-        if (recentItems.length > 0) {
-          const productIds = Array.from(new Set(recentItems.map((item: any) => item.product_id)));
+        if (scopedItems.length > 0) {
+          const productIds = Array.from(new Set(scopedItems.map((item: any) => item.product_id)));
           const { data: prodData } = await supabase
             .from("products")
             .select("id, name, images, image1")
@@ -89,7 +103,7 @@ function CartSuccessPageContent() {
             prodMap[p.id] = p;
           });
           setProducts(prodMap);
-        }
+  }
       } catch (error) {
         console.error("Error loading order details:", error);
       } finally {

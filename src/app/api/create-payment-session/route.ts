@@ -201,6 +201,7 @@ export async function POST(request: NextRequest) {
       voucher,
       delivery_address_id,
       branch,
+      receipt_ref,
     } = await request.json();
 
     if (!success_url || !cancel_url) {
@@ -242,6 +243,7 @@ export async function POST(request: NextRequest) {
           branch,
           from_cart: true,
           cart_id: cartItem.id,
+          ...(receipt_ref ? { receipt_ref } : {}),
         },
         delivery_address_id,
         created_at: nowIso,
@@ -287,7 +289,7 @@ export async function POST(request: NextRequest) {
     const productIds = Array.from(new Set(rows.map((r) => r.product_id)));
     const { data: products, error: prodErr } = await supabase
       .from('products')
-      .select('id, name, price')
+      .select('id, name, price, inventory')
       .in('id', productIds);
 
     if (prodErr) {
@@ -295,6 +297,49 @@ export async function POST(request: NextRequest) {
     }
 
     const productMap = new Map((products || []).map((p) => [p.id, p]));
+
+    // Reserve inventory immediately for reservations so UI reflects stock change
+    // and avoid double-deduct later by marking inventory_deducted in meta
+    if (payment_type === 'reservation') {
+      for (const r of rows) {
+        const p = productMap.get(r.product_id);
+        const qty = Math.max(1, Number(r.quantity || 1));
+        const meta = r.meta || {};
+        // Skip if already reserved/deducted (idempotency)
+        if (meta.inventory_reserved || meta.inventory_deducted) continue;
+        if (!p) {
+          return NextResponse.json({ error: `Product not found for reservation` }, { status: 404 });
+        }
+        const currentInv = Number(p.inventory ?? 0);
+        const nextInv = currentInv - qty;
+        if (nextInv < 0) {
+          return NextResponse.json({ error: `Insufficient inventory for ${p.name}` }, { status: 409 });
+        }
+        // Persist inventory deduction
+        const { error: invErr } = await supabase
+          .from('products')
+          .update({ inventory: nextInv })
+          .eq('id', r.product_id);
+        if (invErr) {
+          return NextResponse.json({ error: `Failed to reserve inventory: ${invErr.message}` }, { status: 500 });
+        }
+        // Mark user_item so webhooks/capture won't deduct again
+        const reservedMeta = {
+          ...meta,
+          inventory_reserved: true,
+          inventory_deducted: true,
+          product_stock_before: currentInv,
+          product_stock_after: nextInv,
+          inventory_reserved_at: new Date().toISOString(),
+        };
+        await supabase
+          .from('user_items')
+          .update({ meta: reservedMeta })
+          .eq('id', r.id);
+        // Update our local productMap to reflect new inventory for subsequent items
+        p.inventory = nextInv;
+      }
+    }
     let subtotal = 0;
     let addonsTotal = 0;
 
@@ -503,6 +548,7 @@ export async function POST(request: NextRequest) {
             final_total_per_item: metaInfo.finalTotal,
             addons_total_per_item: metaInfo.addonsTotal,
             payment_type,
+            ...(receipt_ref ? { receipt_ref } : {}),
           },
           updated_at: new Date().toISOString()
         })
@@ -533,6 +579,7 @@ export async function POST(request: NextRequest) {
       total_amount: totalAmount,
       line_items_json: JSON.stringify(displayLineItems),
       per_item_summary_json: JSON.stringify(perItemSummary),
+      ...(receipt_ref ? { receipt_ref } : {}),
     };
 
     let sessionId: string;
