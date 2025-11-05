@@ -60,12 +60,16 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-  // Determine item type
-  const isCartItem = userItem.item_type === 'cart';
-  const isReservation = userItem.item_type === 'reservation';
-  const isOrder = userItem.item_type === 'order';
+        // Determine if this is a cart item or already a reservation
+        const isCartItem = userItem.item_type === 'cart';
+        const isReservation = userItem.item_type === 'reservation';
 
-        console.log(`📋 Item ${id}: type=${userItem.item_type}, status=${userItem.status}, isCart=${isCartItem}, isReservation=${isReservation}, isOrder=${isOrder}`);
+        console.log(`📋 Item ${id}: type=${userItem.item_type}, status=${userItem.status}, isCart=${isCartItem}, isReservation=${isReservation}`);
+
+        if (!isCartItem && !isReservation) {
+          console.warn(`⚠️ Item ${id} is neither cart nor reservation (type: ${userItem.item_type})`);
+          continue;
+        }
         
         if (!cartUserId) cartUserId = userItem.user_id;
 
@@ -120,7 +124,6 @@ export async function POST(request: NextRequest) {
         if (isCartItem) {
           updateData.item_type = 'reservation';
         }
-        // If it's an 'order' type, leave as is but still proceed with inventory deduction
 
         const { error: updateErr } = await supabase
           .from('user_items')
@@ -130,7 +133,7 @@ export async function POST(request: NextRequest) {
         if (updateErr) {
           console.error(`❌ Failed to update item ${id}:`, updateErr);
         } else {
-          const action = isCartItem ? 'Converted cart item' : (isReservation ? 'Updated reservation' : 'Updated order');
+          const action = isCartItem ? 'Converted cart item' : 'Updated reservation';
           console.log(`✅ ${action} ${id} to pending_payment status`);
 
           // Deduct inventory from products table (idempotent: only once per item)

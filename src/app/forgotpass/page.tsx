@@ -33,7 +33,8 @@ export default function ResetPasswordPage() {
 
     // Remove manual check for user existence
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/forgotpass/reset`,
+      // Use a stable base URL that works on both localhost and Vercel
+      redirectTo: `${baseUrl}/forgotpass/reset`,
     });
 
     if (resetError) {

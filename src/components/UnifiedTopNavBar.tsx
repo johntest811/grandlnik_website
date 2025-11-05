@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { FaBell, FaChevronDown, FaEnvelope, FaPhone, FaThumbsUp, FaUserCircle } from "react-icons/fa";
+import { FaBell, FaChevronDown, FaEnvelope, FaPhone, FaThumbsUp, FaUserCircle, FaShoppingCart } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/app/Clients/Supabase/SupabaseClients";
 
@@ -23,6 +23,7 @@ export default function UnifiedTopNavBar() {
   const [notifications, setNotifications] = useState<UserNotif[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [cartCount, setCartCount] = useState<number>(0);
   const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
   const [hoveredDropdown, setHoveredDropdown] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -44,6 +45,40 @@ export default function UnifiedTopNavBar() {
     if (user?.id) fetchNotifications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Load cart count and subscribe to cart changes for this user
+  useEffect(() => {
+    if (!user?.id) {
+      setCartCount(0);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadCount = async () => {
+      const { count } = await supabase
+        .from("cart")
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      if (isMounted) setCartCount(count || 0);
+    };
+
+    loadCount();
+
+    const channel = supabase
+      .channel(`cart-count-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cart', filter: `user_id=eq.${user.id}` },
+        () => loadCount()
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   // Realtime subscription for user notifications
   useEffect(() => {
@@ -323,6 +358,21 @@ export default function UnifiedTopNavBar() {
               INQUIRE NOW
             </button>
           </Link>
+
+          {/* Cart button */}
+          <button
+            onClick={() => router.push('/profile/cart')}
+            title="Cart"
+            className="relative p-2 rounded hover:bg-gray-100 transition"
+            aria-label="Cart"
+          >
+            <FaShoppingCart className={`text-xl ${cartCount > 0 ? 'text-[#8B1C1C]' : 'text-gray-700'}`} />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-[#8B1C1C] text-white text-[10px] flex items-center justify-center">
+                {cartCount > 99 ? '99+' : cartCount}
+              </span>
+            )}
+          </button>
 
           {/* Show notifications only for logged-in users */}
           {user && (
