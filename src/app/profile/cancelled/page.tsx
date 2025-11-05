@@ -288,7 +288,12 @@ Thank you.`;
             {filtered.map((it) => {
               const p = productsById[it.product_id];
               const imgKey = p?.images?.[0] ?? p?.image1 ?? p?.image2 ?? it.meta?.product_image;
-              const imgUrl = imgKey ? (imgKey.startsWith("http") ? imgKey : `${SUPABASE_URL}/storage/v1/object/public/uploads/${encodeURIComponent(imgKey)}`) : null;
+              // Build a safe storage URL: trim any leading slash and do NOT URL-encode path separators
+              const imgUrl = imgKey
+                ? (imgKey.startsWith("http")
+                    ? imgKey
+                    : `${SUPABASE_URL}/storage/v1/object/public/uploads/${String(imgKey).replace(/^\/+/, "")}`)
+                : null;
               const title = p?.name ?? it.meta?.product_name ?? "Untitled Product";
 
               const statusDisplay = getStatusDisplay(it.status);

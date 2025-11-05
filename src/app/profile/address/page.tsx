@@ -128,40 +128,39 @@ export default function AddressManager() {
     const fullName = `${firstName} ${lastName}`;
 
     if (editingId) {
-      // update existing address
-      const { data, error } = await supabase
-        .from("addresses")
-        .update({
-          first_name: firstName,
-          last_name: lastName,
-          full_name: fullName,
-          phone,
-          email,               // NEW
-          address,
-          is_default: isDefaultChecked,
-        })
-        .eq("id", editingId)
-        .select()
-        .single();
-
-      if (error) {
-        console.error("update address error", error);
-        alert("Could not update address");
-        return;
-      }
-
-      // if set as default, clear others
+      // When setting default, clear other defaults first to avoid any uniqueness/trigger constraints,
+      // then update this row with is_default=true alongside other fields.
       if (isDefaultChecked) {
         const { error: clearErr } = await supabase
           .from("addresses")
           .update({ is_default: false })
           .eq("user_id", user.id)
           .neq("id", editingId);
-
-        if (clearErr) console.error("clear defaults error", clearErr);
+        if (clearErr) {
+          console.error("clear defaults error", clearErr);
+          // don't bail; attempt to continue updating the current row
+        }
       }
 
-      // notify server
+      const { error: updErr } = await supabase
+        .from("addresses")
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          full_name: fullName,
+          phone,
+          email, // NEW
+          address,
+          is_default: !!isDefaultChecked,
+        })
+        .match({ id: editingId, user_id: user.id });
+
+      if (updErr) {
+        console.error("update address error", updErr);
+        alert("Could not update address");
+        return;
+      }
+
       await notifyServersAddressUpdated(
         user.id,
         "Address updated",
@@ -169,36 +168,40 @@ export default function AddressManager() {
       );
     } else {
       // insert new address
-      const isDefault = isDefaultChecked || addresses.length === 0;
+      const wantDefault = isDefaultChecked || addresses.length === 0;
 
-      const { data, error } = await supabase
+      // Insert first with is_default = false to avoid any "multiple defaults" constraint,
+      // then promote to default if requested.
+      const { data: inserted, error: insErr } = await supabase
         .from("addresses")
-        .insert([{
-          user_id: user.id,
-          first_name: firstName,
-          last_name: lastName,
-          full_name: fullName,
-          phone,
-          email,               // NEW
-          address,
-          is_default: isDefault,
-        }])
+        .insert([
+          {
+            user_id: user.id,
+            first_name: firstName,
+            last_name: lastName,
+            full_name: fullName,
+            phone,
+            email, // NEW
+            address,
+            is_default: false,
+          },
+        ])
         .select()
         .single();
 
-      if (error) {
-        console.error(error);
+      if (insErr) {
+        console.error(insErr);
         alert("Could not save address");
         return;
       }
 
-      // If this was inserted as default, clear other defaults
-      if (isDefault) {
+      if (wantDefault && inserted?.id) {
+        // Clear other defaults then set this one as default
+        await supabase.from("addresses").update({ is_default: false }).eq("user_id", user.id);
         await supabase
           .from("addresses")
-          .update({ is_default: false })
-          .eq("user_id", user.id)
-          .neq("id", data.id);
+          .update({ is_default: true })
+          .match({ id: inserted.id, user_id: user.id });
       }
 
       await notifyServersAddressUpdated(

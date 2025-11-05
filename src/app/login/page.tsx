@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const baseUrl =
@@ -21,6 +22,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
       // First, verify email and password with Supabase Auth
@@ -31,6 +33,7 @@ export default function LoginPage() {
 
       if (signInError) {
         setError("Invalid email or password");
+        setLoading(false);
         return;
       }
 
@@ -48,6 +51,7 @@ export default function LoginPage() {
 
       if (!response.ok) {
         setError(result.error || 'Failed to send verification code');
+        setLoading(false);
         return;
       }
 
@@ -59,6 +63,7 @@ export default function LoginPage() {
       router.push('/login/verify');
     } catch (err: any) {
       setError(err.message || 'An error occurred');
+      setLoading(false);
     }
   };
 
@@ -112,7 +117,23 @@ export default function LoginPage() {
             <div className="flex justify-end text-xs">
               <a href="forgotpass" className="text-blue-600 hover:underline">Forgot Password</a>
             </div>
-            <button type="submit" className="bg-[#232d3b] text-white font-semibold rounded w-full py-2 mt-2 hover:bg-[#1a222e] transition">LOGIN</button>
+            <button
+              type="submit"
+              disabled={loading}
+              aria-busy={loading}
+              className={`relative bg-[#232d3b] text-white font-semibold rounded w-full py-2 mt-2 transition 
+                ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-[#1a222e]'}
+              `}
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-5 w-5 border-2 border-white/60 border-t-white rounded-full animate-spin" />
+                  <span>Loading…</span>
+                </span>
+              ) : (
+                'LOGIN'
+              )}
+            </button>
             {error && (
               <div className="text-red-600 text-xs text-center mt-2">{error}</div>
             )}

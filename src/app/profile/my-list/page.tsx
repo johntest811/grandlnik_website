@@ -37,6 +37,8 @@ export default function ProfileMyListPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [moving, setMoving] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -64,6 +66,12 @@ export default function ProfileMyListPage() {
         if (uiErr) throw uiErr;
         const userItems = uiData ?? [];
         setItems(userItems);
+        // reset selections to keep only ids still present
+        setSelected((prev) => {
+          const next: Record<string, boolean> = {};
+          userItems.forEach((u) => { if (prev[u.id]) next[u.id] = true; });
+          return next;
+        });
 
         // fetch products for product_ids found
         const productIds = Array.from(new Set(userItems.map((u) => u.product_id).filter(Boolean)));
@@ -135,6 +143,58 @@ export default function ProfileMyListPage() {
     router.push(`/reservation?productId=${item.product_id}`);
   };
 
+  const toggleOne = (id: string) => {
+    setSelected((s) => ({ ...s, [id]: !s[id] }));
+  };
+
+  const allSelected = items.length > 0 && items.every((i) => selected[i.id]);
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected({});
+    } else {
+      const next: Record<string, boolean> = {};
+      items.forEach((i) => (next[i.id] = true));
+      setSelected(next);
+    }
+  };
+
+  const selectedItems = useMemo(() => items.filter((i) => selected[i.id]), [items, selected]);
+
+  const moveSelectedToCart = async () => {
+    if (!userId) return alert("Please log in.");
+    if (selectedItems.length === 0) return alert("Please select at least one item.");
+    setMoving(true);
+    try {
+      // Post each selected item to the cart API
+      await Promise.all(
+        selectedItems.map(async (it) => {
+          const body = {
+            userId,
+            productId: it.product_id,
+            quantity: Math.max(1, Number(it.quantity || 1)),
+            meta: { from: "my-list", wishlist_item_id: it.id, ...(it.meta || {}) },
+          };
+          const res = await fetch("/api/cart", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            throw new Error(d?.error || "Failed to add to cart");
+          }
+        })
+      );
+      // Navigate to cart so they can checkout
+      router.push("/profile/cart");
+    } catch (e: any) {
+      console.error("move to cart error", e);
+      alert(e?.message || "Could not move items to cart");
+    } finally {
+      setMoving(false);
+    }
+  };
+
   return (
     <section className="flex-1 flex flex-col px-8 py-8">
    
@@ -149,6 +209,39 @@ export default function ProfileMyListPage() {
         />
       </div>
       <hr className="mb-4" />
+
+      {/* Toolbar: selection + move */}
+      {!loading && items.length > 0 && (
+        <div className="flex items-center justify-between mb-3">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={allSelected}
+              onChange={toggleAll}
+            />
+            <span>Select all</span>
+          </label>
+          <button
+            onClick={moveSelectedToCart}
+            disabled={moving || selectedItems.length === 0}
+            className={`px-4 py-2 rounded text-sm font-medium text-white transition ${
+              selectedItems.length === 0 || moving
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700"
+            }`}
+          >
+            {moving ? (
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 border-2 border-white/70 border-t-white rounded-full animate-spin" />
+                Moving to Cart...
+              </span>
+            ) : (
+              <>Add Selected to Cart ({selectedItems.length})</>
+            )}
+          </button>
+        </div>
+      )}
 
       <div className="flex-1">
         {loading ? (
@@ -165,11 +258,22 @@ export default function ProfileMyListPage() {
             {filtered.map((it) => {
               const p = productsById[it.product_id];
               const imgKey = p?.images?.[0] ?? p?.image1 ?? p?.image2;
-              const imgUrl = imgKey ? (imgKey.startsWith("http") ? imgKey : `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "")}/storage/v1/object/public/uploads/${encodeURIComponent(imgKey)}`) : null;
+              const imgUrl = imgKey
+                ? (imgKey.startsWith("http")
+                    ? imgKey
+                    : `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "")}/storage/v1/object/public/uploads/${imgKey.replace(/^\/+/, "")}`)
+                : null;
               const title = p?.name ?? it.meta?.name ?? "Untitled";
 
               return (
                 <div key={it.id} className="bg-white p-4 rounded shadow flex items-center gap-4">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 mt-1"
+                    checked={!!selected[it.id]}
+                    onChange={() => toggleOne(it.id)}
+                    aria-label={`Select ${title}`}
+                  />
                   <div className="w-28 h-20 bg-gray-100 flex items-center justify-center overflow-hidden rounded">
                     {imgUrl ? <img src={imgUrl} alt={title} className="w-full h-full object-cover" /> : <span className="text-gray-400">Image</span>}
                   </div>
