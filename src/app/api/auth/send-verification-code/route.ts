@@ -4,7 +4,8 @@ import nodemailer from "nodemailer";
 export const runtime = 'nodejs';
 
 // Store verification codes temporarily (in production, use Redis or database)
-const verificationCodes = new Map<string, { code: string; expiresAt: number }>();
+// Also track lastSentAt to avoid duplicate emails being sent rapidly
+const verificationCodes = new Map<string, { code: string; expiresAt: number; lastSentAt: number }>();
 
 // Generate a 6-digit verification code
 function generateVerificationCode(): string {
@@ -13,19 +14,41 @@ function generateVerificationCode(): string {
 
 export async function POST(req: Request) {
   try {
-    const { email } = await req.json();
+    const { email, resend } = await req.json();
     
     if (!email || typeof email !== "string") {
       return NextResponse.json({ error: "Invalid email" }, { status: 400 });
     }
 
-    // Generate verification code
-    const code = generateVerificationCode();
-    
-    // Store code with 10 minute expiration
-    verificationCodes.set(email.toLowerCase(), {
+    const key = email.toLowerCase();
+    const existing = verificationCodes.get(key);
+
+    // If a valid code already exists and this isn't an explicit resend request,
+    // don't send another email. This prevents duplicate emails in the inbox.
+    if (existing && existing.expiresAt > Date.now() && !resend) {
+      return NextResponse.json({ success: true, message: "Verification code already sent" });
+    }
+
+    // If resend is requested, rate-limit resends to once every 60 seconds.
+    if (existing && existing.expiresAt > Date.now() && resend) {
+      const now = Date.now();
+      const elapsed = now - (existing.lastSentAt || 0);
+      if (elapsed < 60_000) {
+        const remain = Math.ceil((60_000 - elapsed) / 1000);
+        return NextResponse.json({ success: true, message: `Please wait ${remain}s before resending` });
+      }
+    }
+
+    // Generate a new code when missing/expired; otherwise reuse the existing code
+    const code = existing && existing.expiresAt > Date.now()
+      ? existing.code
+      : generateVerificationCode();
+
+    // Persist metadata (reuse code if still valid, extend/refresh TTL and lastSentAt)
+    verificationCodes.set(key, {
       code,
-      expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+      lastSentAt: Date.now(),
     });
 
     // Send email with verification code

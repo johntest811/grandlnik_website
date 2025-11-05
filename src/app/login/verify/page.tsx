@@ -132,19 +132,19 @@ export default function VerifyPage() {
       const response = await fetch("/api/auth/send-verification-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, resend: true }),
       });
 
-      const data = await response.json();
+  const data = await response.json();
 
       if (!response.ok) {
         setError(data.error || "Failed to resend code");
       } else {
         setCode(["", "", "", "", "", ""]);
         inputRefs.current[0]?.focus();
-        // Show success message briefly
+        // Show success message from server (may indicate rate limit wait)
         setError("");
-        alert("New verification code sent to your email!");
+        alert(data?.message || "Verification code sent to your email!");
       }
     } catch (err: any) {
       console.error("Resend error:", err);
@@ -160,10 +160,10 @@ export default function VerifyPage() {
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
-            <h2 className="text-3xl font-extrabold text-gray-900">
+            <h2 className="text-3xl font-extrabold text-black">
               Enter Verification Code
             </h2>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-black">
               We sent a 6-digit code to
             </p>
             <p className="text-sm font-medium text-[#8B1C1C]">{email}</p>
@@ -185,7 +185,7 @@ export default function VerifyPage() {
                       value={digit}
                       onChange={(e) => handleChange(index, e.target.value)}
                       onKeyDown={(e) => handleKeyDown(index, e)}
-                      className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg focus:border-[#8B1C1C] focus:ring-2 focus:ring-[#8B1C1C]/20 outline-none transition-all"
+                      className="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg focus:border-[#8B1C1C] focus:ring-2 focus:ring-[#8B1C1C]/20 outline-none transition-all text-black"
                       disabled={loading}
                     />
                   ))}
@@ -230,7 +230,7 @@ export default function VerifyPage() {
               </button>
 
               <div className="text-center space-y-2">
-                <p className="text-sm text-gray-600">Didn't receive the code?</p>
+                <p className="text-sm text-black">Didn't receive the code?</p>
                 <button
                   type="button"
                   onClick={handleResend}
@@ -249,7 +249,7 @@ export default function VerifyPage() {
                     sessionStorage.removeItem("login_password");
                     router.push("/login");
                   }}
-                  className="text-sm text-gray-600 hover:text-gray-900"
+                  className="text-sm text-black hover:text-black"
                 >
                   ← Back to Login
                 </button>
@@ -257,7 +257,7 @@ export default function VerifyPage() {
             </form>
           </div>
 
-          <div className="text-center text-xs text-gray-500">
+          <div className="text-center text-xs text-black">
             <p>🔒 Your code will expire in 10 minutes</p>
           </div>
         </div>

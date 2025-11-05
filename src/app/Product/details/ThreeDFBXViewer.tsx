@@ -5,7 +5,7 @@ import { FBXLoader, OrbitControls } from "three-stdlib";
 
 type Props = {
   fbxUrls: string[];
-  weather: "sunny" | "rainy" | "windy" | "foggy";
+  weather: "sunny" | "rainy" | "night" | "foggy";
   width?: number;
   height?: number;
 };
@@ -276,7 +276,7 @@ export default function ThreeDFBXViewer({ fbxUrls, weather, width = 1200, height
     // frame counter
     let frameCounter = 0;
 
-    const applyWeather = (type: string) => {
+  const applyWeather = (type: string) => {
       // cleanup previous weather effects
       if (rainSystem) {
         try {
@@ -340,70 +340,16 @@ export default function ThreeDFBXViewer({ fbxUrls, weather, width = 1200, height
 
         const fogDensity = performanceFactor > 0.5 ? 0.001 : 0.0006;
         scene.fog = new THREE.FogExp2(0xbfd1e5, fogDensity);
-      } else if (type === "windy") {
-        scene.background = new THREE.Color(0xe6f2ff);
-        ambient.intensity = 0.5;
-        sunLight.intensity = 1.8;
-        renderer.setClearColor(0xe6f2ff, 1);
-
-        const windCount = performanceFactor > 0.6 ? STRONG_WIND : BASE_WIND;
-        const positions = new Float32Array(windCount * 3);
-        windVel = new Float32Array(windCount * 3);
-        windLifetime = new Float32Array(windCount);
-
-        const modelCenter = modelBounds ? modelBounds.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0, 0);
-        const modelSize = modelBounds ? modelBounds.getSize(new THREE.Vector3()) : new THREE.Vector3(100, 100, 100);
-        const windRange = Math.max(modelSize.x, modelSize.y, modelSize.z) * 3;
-        
-        for (let i = 0; i < windCount; i++) {
-          const side = Math.random();
-          let startX, startY, startZ;
-          
-          if (side < 0.7) {
-            startX = modelCenter.x - windRange * (0.8 + Math.random() * 0.4);
-            startY = modelCenter.y + (Math.random() - 0.5) * modelSize.y * 2;
-            startZ = modelCenter.z + (Math.random() - 0.5) * windRange;
-          } else if (side < 0.9) {
-            startX = modelCenter.x + (Math.random() - 0.5) * windRange;
-            startY = modelCenter.y + (Math.random() - 0.5) * modelSize.y * 2;
-            startZ = modelCenter.z - windRange * (0.8 + Math.random() * 0.4);
-          } else {
-            startX = modelCenter.x + (Math.random() - 0.5) * windRange * 0.5;
-            startY = modelCenter.y + windRange * (0.5 + Math.random() * 0.3);
-            startZ = modelCenter.z + (Math.random() - 0.5) * windRange * 0.5;
-          }
-
-          positions[i * 3 + 0] = startX;
-          positions[i * 3 + 1] = startY;
-          positions[i * 3 + 2] = startZ;
-
-          const baseWindSpeed = 8 + Math.random() * 12;
-          const windDirection = Math.PI * 0.1 * (Math.random() - 0.5);
-          
-          windVel[i * 3 + 0] = baseWindSpeed * Math.cos(windDirection);
-          windVel[i * 3 + 1] = (Math.random() - 0.5) * 2;
-          windVel[i * 3 + 2] = baseWindSpeed * Math.sin(windDirection) * 0.3;
-          
-          windLifetime[i] = Math.random() * 100;
-        }
-        
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-        const mat = new THREE.PointsMaterial({
-          map: windTexture,
-          size: Math.max(20, 30 * performanceFactor),
-          sizeAttenuation: true,
-          transparent: true,
-          opacity: windBaseOpacity,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        });
-        windSystem = new THREE.Points(geo, mat);
-        windSystem.frustumCulled = false;
-        windSystem.renderOrder = 1;
-        scene.add(windSystem);
-
-        scene.fog = new THREE.FogExp2(0xe6f2ff, 0.0008);
+      } else if (type === "night") {
+        // Night mode: dark blue sky, cooler moonlight, reduced ambient
+        scene.background = new THREE.Color(0x0b1020);
+        renderer.setClearColor(0x0b1020, 1);
+        ambient.intensity = 0.2;
+        // Set main directional as moonlight with bluish tone
+        try { sunLight.color.set(0xbdd1ff); } catch {}
+        sunLight.intensity = 0.6;
+        // Slight, subtle fog for depth at night
+        scene.fog = new THREE.FogExp2(0x0b1020, 0.0006);
       } else if (type === "foggy") {
         scene.background = new THREE.Color(0xd6dbe0);
         ambient.intensity = 0.6;

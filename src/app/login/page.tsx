@@ -82,12 +82,12 @@ export default function LoginPage() {
             <div>
               <label className="font-semibold text-sm mb-1 block text-black" htmlFor="email">Gmail</label>
               <div className="flex items-center border border-gray-400 rounded-lg px-3 py-2 bg-gray-100">
-                <FaEnvelope className="text-gray-500 mr-2" />
+                <FaEnvelope className="text-black mr-2" />
                 <input
                   id="email"
                   type="email"
                   placeholder="Please Enter your Gmail Address"
-                  className="bg-transparent outline-none flex-1 text-gray-700 placeholder-gray-400"
+                  className="bg-transparent outline-none flex-1 text-black placeholder-black"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
@@ -97,12 +97,12 @@ export default function LoginPage() {
             <div>
               <label className="font-semibold text-sm mb-1 block text-black" htmlFor="password">Password</label>
               <div className="flex items-center border border-gray-400 rounded-lg px-3 py-2 bg-gray-100">
-                <FaLock className="text-gray-500 mr-2" />
+                <FaLock className="text-black mr-2" />
                 <input
                   id="password"
                   type="password"
                   placeholder="Please Enter your password"
-                  className="bg-transparent outline-none flex-1 text-gray-700 placeholder-gray-400"
+                  className="bg-transparent outline-none flex-1 text-black placeholder-black"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
@@ -123,9 +123,9 @@ export default function LoginPage() {
             className="flex items-center gap-2 bg-gray-100 border border-gray-300 rounded px-4 py-2 mt-4 w-full justify-center hover:bg-gray-200 transition"
           >
             <FaGoogle className="text-[#4285F4] text-xl" />
-            <span className="font-medium text-gray-700">Sign in with Google</span>
+            <span className="font-medium text-black">Sign in with Google</span>
           </button>
-          <div className="text-xs text-center mt-4 text-gray-600">
+          <div className="text-xs text-center mt-4 text-black">
             Don't have an account yet? <a href="register" className="text-blue-600 hover:underline">Sign Up</a>
           </div>
         </div>

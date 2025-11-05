@@ -22,7 +22,7 @@ function ProductDetailsPageContent() {
   const [product, setProduct] = useState<any>(null);
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [show3D, setShow3D] = useState(false);
-  const [weather, setWeather] = useState<"sunny" | "rainy" | "windy" | "foggy">("sunny");
+  const [weather, setWeather] = useState<"sunny" | "rainy" | "night" | "foggy">("sunny");
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -155,13 +155,18 @@ function ProductDetailsPageContent() {
         <div className="w-full max-w-4xl xl:max-w-6xl bg-white rounded shadow p-12">
           {/* Carousel */}
           <div className="relative flex flex-col items-center">
-            <Image
-              src={images[carouselIdx] || "https://placehold.co/800x500?text=No+Image"}
-              alt={product.name}
-              width={1200}
-              height={700}
-              className="w-full h-[36rem] object-cover rounded"
-            />
+            {/* Main image container - keep aspect and fit */}
+            <div className="relative w-full h-[36rem] bg-gray-100 rounded overflow-hidden">
+              <Image
+                src={images[carouselIdx] || "https://placehold.co/1200x700/png?text=No+Image"}
+                alt={product.name || "Product image"}
+                fill
+                priority
+                quality={95}
+                sizes="(max-width: 768px) 100vw, 1200px"
+                className="object-contain"
+              />
+            </div>
             {/* Arrow buttons */}
             <button
               className="absolute left-2 top-1/2 -translate-y-1/2 text-black hover:text-red-600 px-2 py-2 rounded-full transition flex items-center justify-center"
@@ -183,18 +188,26 @@ function ProductDetailsPageContent() {
                 <path d="M16 14L22 20L16 26" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-            {/* Thumbnails */}
-            <div className="flex gap-2 mt-4 justify-center">
+            {/* Thumbnails - fixed square */}
+            <div className="flex gap-3 mt-4 justify-center">
               {images.map((img, idx) => (
-                <Image
+                <button
                   key={idx}
-                  src={img}
-                  alt={`Thumbnail ${idx + 1}`}
-                  width={90}
-                  height={90}
-                  className={`rounded border cursor-pointer ${carouselIdx === idx ? "border-red-600" : "border-gray-300"}`}
                   onClick={() => setCarouselIdx(idx)}
-                />
+                  className={`relative w-24 h-24 aspect-square rounded-lg overflow-hidden border transition-shadow ${
+                    carouselIdx === idx ? "border-red-600 shadow-md" : "border-gray-300 hover:shadow"
+                  }`}
+                  aria-label={`Show image ${idx + 1}`}
+                >
+                  <Image
+                    src={img || "https://placehold.co/200x200/png?text=No+Image"}
+                    alt={`Thumbnail ${idx + 1}`}
+                    fill
+                    quality={90}
+                    sizes="96px"
+                    className="object-cover"
+                  />
+                </button>
               ))}
             </div>
           </div>
@@ -408,7 +421,7 @@ function ProductDetailsPageContent() {
 
             {/* Weather Controls - Fixed to modal frame */}
             <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-20 flex gap-2">
-              {["sunny", "rainy", "windy", "foggy"].map((w) => (
+              {["sunny", "rainy", "night", "foggy"].map((w) => (
                 <button
                   key={w}
                   className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
