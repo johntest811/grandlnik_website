@@ -102,10 +102,10 @@ export default function ProfileLayout({ children }: { children: React.ReactNode 
             <Link href="/FAQs" className="flex items-center gap-2 text-gray-700 hover:text-[#8B1C1C] font-semibold">
               <span className="font-bold text-lg">!</span> FAQs
             </Link>
-            <Link href="#" className="flex items-center gap-2 text-gray-700 hover:text-[#8B1C1C] font-semibold">
+            {/* <Link href="#" className="flex items-center gap-2 text-gray-700 hover:text-[#8B1C1C] font-semibold">
               <FaQuestionCircle /> Help Centre
-            </Link>
-            <Link href="#" className="flex items-center gap-2 text-gray-700 hover:text-[#8B1C1C] ">
+            </Link> */}
+            <Link href="/Inquire" className="flex items-center gap-2 text-gray-700 hover:text-[#8B1C1C] font-semibold">
               <span className="font-bold text-lg">?</span> Inquire
             </Link>
           </nav>
