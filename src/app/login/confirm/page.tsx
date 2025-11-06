@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import LoadingSuccess from "../LoadingSuccess";
 import { supabase } from "../../Clients/Supabase/SupabaseClients";
 
+// Ensure this page is rendered dynamically (no prerender), fixing Vercel build errors
+export const dynamic = "force-dynamic";
+
 export default function ConfirmLoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [error, setError] = useState<string>("");
   const [working, setWorking] = useState<boolean>(true);
 
@@ -14,9 +16,10 @@ export default function ConfirmLoginPage() {
     const doExchange = async () => {
       try {
         // Supabase sends a "code" param for magic links and password recovery
-        const code = searchParams.get("code");
-        const type = searchParams.get("type");
-        const errParam = searchParams.get("error");
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get("code");
+        const type = url.searchParams.get("type");
+        const errParam = url.searchParams.get("error");
 
         if (errParam) {
           setError(errParam);
