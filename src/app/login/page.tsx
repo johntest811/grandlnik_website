@@ -26,19 +26,23 @@ export default function LoginPage() {
     if (sending) return; // prevent double submit
     setSending(true);
     setError("");
-    // Send magic link to user's email
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${baseUrl}/login/confirm`
+    try {
+      const res = await fetch("/api/auth/request-magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error || "Failed to start login");
+        setSending(false);
+        return;
       }
-    });
-    if (error) {
-      setError(error.message);
+      setShowSuccess(true); // Show "Check your email" message
+    } catch (e: any) {
+      setError("Failed to start login");
       setSending(false);
-      return;
     }
-    setShowSuccess(true); // Show "Check your email" message
   };
 
   const sendConfirmationEmail = async (email: string) => {
