@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState("");
   const [confirmationSent, setConfirmationSent] = useState(false);
+  const [sending, setSending] = useState(false);
   const router = useRouter();
 
   const baseUrl =
@@ -22,7 +23,9 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sending) return; // prevent double submit
     setError("");
+    setSending(true);
     // Send magic link to user's email
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -32,8 +35,11 @@ export default function LoginPage() {
     });
     if (error) {
       setError(error.message);
+      setSending(false);
       return;
     }
+    // Persist email so the confirm page can verify token_hash flows if needed
+    try { sessionStorage.setItem("login_email", email); } catch {}
     setShowSuccess(true); // Show "Check your email" message
   };
 
@@ -111,7 +117,13 @@ export default function LoginPage() {
             <div className="flex justify-end text-xs">
               <a href="forgotpass" className="text-blue-600 hover:underline">Forgot Password</a>
             </div>
-            <button type="submit" className="bg-[#232d3b] text-white font-semibold rounded w-full py-2 mt-2 hover:bg-[#1a222e] transition">LOGIN</button>
+            <button
+              type="submit"
+              disabled={sending}
+              className={`bg-[#232d3b] text-white font-semibold rounded w-full py-2 mt-2 transition ${sending ? "opacity-60 cursor-not-allowed" : "hover:bg-[#1a222e]"}`}
+            >
+              {sending ? "Sending link..." : "LOGIN"}
+            </button>
             {error && (
               <div className="text-red-600 text-xs text-center mt-2">{error}</div>
             )}
