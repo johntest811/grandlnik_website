@@ -318,13 +318,13 @@ function CartCheckoutContent() {
               {/* Pickup Branch */}
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Pickup Branch <span className="text-red-600">*</span>
+                  Branch <span className="text-red-600">*</span>
                 </label>
                 <select
                   value={selectedBranch}
                   onChange={(e) => setSelectedBranch(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:ring-2 focus:ring-[#8B1C1C] focus:border-transparent"
-                  required
+                  // required
                 >
                   <option value="">Select Branch</option>
                   {branches.map((branch) => (
