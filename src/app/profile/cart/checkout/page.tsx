@@ -324,7 +324,7 @@ function CartCheckoutContent() {
                   value={selectedBranch}
                   onChange={(e) => setSelectedBranch(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:ring-2 focus:ring-[#8B1C1C] focus:border-transparent"
-                  // required
+                  required
                 >
                   <option value="">Select Branch</option>
                   {branches.map((branch) => (
